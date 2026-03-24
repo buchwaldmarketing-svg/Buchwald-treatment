@@ -16,7 +16,6 @@ const UPGRADED_SERVICES = [
   "Jet White Prophy","Fluoride",
 ];
 
-const TEETH = ["N/A", ...Array.from({ length: 32 }, (_, i) => String(i + 1))];
 
 const FINANCING_OPTIONS = [
   { label: "No financing", months: 0 },
@@ -103,7 +102,7 @@ export default function TreatmentPlan() {
   const [patientName, setPatientName] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   // Multiple treatments
-  const [treatments, setTreatments] = useState([{ id: 1, tooth: "N/A", name: "", fee: "" }]);
+  const [treatments, setTreatments] = useState([{ id: 1, teeth: [], name: "", fee: "" }]);
   const [insuranceCoverage, setInsuranceCoverage] = useState("");
   const [financing, setFinancing] = useState(0); // months
   const [selectedUpgrades, setSelectedUpgrades] = useState([]);
@@ -124,19 +123,20 @@ export default function TreatmentPlan() {
   const monthlyPaymentDebit = financing > 0 ? Math.round((totalDebit / financing) * 100) / 100 : 0;
 
   const treatmentDisplay = treatments.filter(t => t.name).map(t => {
-    const tooth = t.tooth === "N/A" ? "" : "#" + t.tooth;
-    return [tooth, t.name].filter(Boolean).join(" - ");
+    const toothStr = t.teeth.length > 0 ? "#" + t.teeth.join(", #") : "";
+    return [toothStr, t.name].filter(Boolean).join(" - ");
   }).join(", ");
 
   const toggleUpgrade = (svc) => setSelectedUpgrades((prev) => prev.includes(svc) ? prev.filter((s) => s !== svc) : [...prev, svc]);
   const formComplete = patientName && treatments.some(t => t.name && t.fee);
 
-  const addTreatment = () => setTreatments(prev => [...prev, { id: Date.now(), tooth: "N/A", name: "", fee: "" }]);
+  const addTreatment = () => setTreatments(prev => [...prev, { id: Date.now(), teeth: [], name: "", fee: "" }]);
   const removeTreatment = (id) => setTreatments(prev => prev.length > 1 ? prev.filter(t => t.id !== id) : prev);
   const updateTreatment = (id, field, value) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
+  const toggleTooth = (id, num) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, teeth: t.teeth.includes(num) ? t.teeth.filter(n => n !== num) : [...t.teeth, num].sort((a, b) => a - b) } : t));
 
   const resetForm = () => {
-    setPatientName(""); setTreatments([{ id: 1, tooth: "N/A", name: "", fee: "" }]);
+    setPatientName(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
     setInsuranceCoverage(""); setFinancing(0); setSelectedUpgrades([]);
     setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null);
     setShowPreview(false); setCollectSignatures(false); setSigStep("patient");
@@ -227,13 +227,7 @@ export default function TreatmentPlan() {
                   <button onClick={() => removeTreatment(t.id)} style={{ position: "absolute", top: 8, right: 10, background: "none", border: "none", color: "#cc3333", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>{"\u00D7"}</button>
                 )}
                 <div style={{ fontSize: 11, fontWeight: 700, color: BLUE, marginBottom: 8 }}>Treatment {idx + 1}</div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <div style={{ flex: "0 0 80px" }}>
-                    <label style={{ ...labelStyle, marginTop: 0 }}>Tooth #</label>
-                    <select value={t.tooth} onChange={(e) => updateTreatment(t.id, "tooth", e.target.value)} style={{ ...inputStyle, padding: "10px 8px", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}>
-                      {TEETH.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ ...labelStyle, marginTop: 0 }}>Treatment</label>
                     <input type="text" value={t.name} onChange={(e) => updateTreatment(t.id, "name", e.target.value)} placeholder="Crown, Invisalign..." style={{ ...inputStyle, padding: "10px 12px" }} />
@@ -245,6 +239,13 @@ export default function TreatmentPlan() {
                       <input type="number" inputMode="decimal" value={t.fee} onChange={(e) => updateTreatment(t.id, "fee", e.target.value)} placeholder="0" style={{ ...inputStyle, padding: "10px 12px 10px 24px" }} />
                     </div>
                   </div>
+                </div>
+                <label style={{ ...labelStyle, marginTop: 0 }}>Tooth # <span style={{ fontWeight: 400, color: "#999" }}>{t.teeth.length > 0 ? `(${t.teeth.length} selected)` : "(optional)"}</span></label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {Array.from({ length: 32 }, (_, i) => i + 1).map(num => {
+                    const active = t.teeth.includes(num);
+                    return <button key={num} type="button" onClick={() => toggleTooth(t.id, num)} style={{ width: 34, height: 30, borderRadius: 6, border: `1.5px solid ${active ? BLUE : "#ddd"}`, background: active ? LIGHT_BLUE : "white", color: active ? BLUE : GRAY, fontSize: 12, fontWeight: active ? 700 : 400, cursor: "pointer", padding: 0 }}>{num}</button>;
+                  })}
                 </div>
               </div>
             ))}
@@ -374,7 +375,7 @@ export default function TreatmentPlan() {
             <tbody>
               {treatments.filter(t => t.name).map((t, i) => (
                 <tr key={i}>
-                  <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.tooth === "N/A" ? "-" : "#" + t.tooth}</td>
+                  <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.teeth.length > 0 ? t.teeth.map(n => "#" + n).join(", ") : "-"}</td>
                   <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.name}</td>
                   <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee", textAlign: "right" }}>${(parseFloat(t.fee) || 0).toFixed(2)}</td>
                 </tr>
