@@ -103,7 +103,7 @@ export default function TreatmentPlan() {
   const [patientName, setPatientName] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   // Multiple treatments
-  const [treatments, setTreatments] = useState([{ id: 1, tooth: "N/A", name: "", fee: "" }]);
+  const [treatments, setTreatments] = useState([{ id: 1, teeth: [], name: "", fee: "" }]);
   const [insuranceCoverage, setInsuranceCoverage] = useState("");
   const [financing, setFinancing] = useState(0); // months
   const [sameDayDiscount, setSameDayDiscount] = useState(false);
@@ -126,19 +126,20 @@ export default function TreatmentPlan() {
   const monthlyPayment = financing > 0 ? Math.round((creditPrice / financing) * 100) / 100 : 0;
 
   const treatmentDisplay = treatments.filter(t => t.name).map(t => {
-    const tooth = t.tooth === "N/A" ? "" : "#" + t.tooth;
-    return [tooth, t.name].filter(Boolean).join(" - ");
-  }).join(", ");
+    const teethStr = t.teeth.length > 0 ? "#" + t.teeth.join(", #") : "";
+    return [teethStr, t.name].filter(Boolean).join(" - ");
+  }).join("; ");
 
   const toggleUpgrade = (svc) => setSelectedUpgrades((prev) => prev.includes(svc) ? prev.filter((s) => s !== svc) : [...prev, svc]);
   const formComplete = patientName && treatments.some(t => t.name && t.fee);
 
-  const addTreatment = () => setTreatments(prev => [...prev, { id: Date.now(), tooth: "N/A", name: "", fee: "" }]);
+  const addTreatment = () => setTreatments(prev => [...prev, { id: Date.now(), teeth: [], name: "", fee: "" }]);
   const removeTreatment = (id) => setTreatments(prev => prev.length > 1 ? prev.filter(t => t.id !== id) : prev);
   const updateTreatment = (id, field, value) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
+  const toggleTooth = (id, num) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, teeth: t.teeth.includes(num) ? t.teeth.filter(n => n !== num) : [...t.teeth, num].sort((a,b) => a - b) } : t));
 
   const resetForm = () => {
-    setPatientName(""); setTreatments([{ id: 1, tooth: "N/A", name: "", fee: "" }]);
+    setPatientName(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
     setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setSelectedUpgrades([]);
     setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null);
     setShowPreview(false); setCollectSignatures(false); setSigStep("patient");
@@ -229,13 +230,7 @@ export default function TreatmentPlan() {
                   <button onClick={() => removeTreatment(t.id)} style={{ position: "absolute", top: 8, right: 10, background: "none", border: "none", color: "#cc3333", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>{"\u00D7"}</button>
                 )}
                 <div style={{ fontSize: 11, fontWeight: 700, color: BLUE, marginBottom: 8 }}>Treatment {idx + 1}</div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <div style={{ flex: "0 0 80px" }}>
-                    <label style={{ ...labelStyle, marginTop: 0 }}>Tooth #</label>
-                    <select value={t.tooth} onChange={(e) => updateTreatment(t.id, "tooth", e.target.value)} style={{ ...inputStyle, padding: "10px 8px", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}>
-                      {TEETH.map((v) => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ ...labelStyle, marginTop: 0 }}>Treatment</label>
                     <input type="text" value={t.name} onChange={(e) => updateTreatment(t.id, "name", e.target.value)} placeholder="Crown, Invisalign..." style={{ ...inputStyle, padding: "10px 12px" }} />
@@ -248,6 +243,21 @@ export default function TreatmentPlan() {
                     </div>
                   </div>
                 </div>
+                <label style={{ ...labelStyle, marginTop: 0, marginBottom: 8 }}>Tooth # <span style={{ fontWeight: 400, color: "#999" }}>(optional)</span></label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 6 }}>
+                  {Array.from({ length: 32 }, (_, i) => i + 1).map((num) => {
+                    const selected = t.teeth.includes(num);
+                    return (
+                      <button key={num} onClick={() => toggleTooth(t.id, num)}
+                        style={{ padding: "8px 0", borderRadius: 8, border: `1.5px solid ${selected ? BLUE : "#ddd"}`, background: selected ? BLUE : "white", color: selected ? "white" : DARK, fontSize: 13, fontWeight: selected ? 700 : 400, cursor: "pointer", transition: "all 0.15s" }}>
+                        {num}
+                      </button>
+                    );
+                  })}
+                </div>
+                {t.teeth.length > 0 && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: BLUE, fontWeight: 600 }}>Selected: #{t.teeth.join(", #")}</div>
+                )}
               </div>
             ))}
 
@@ -393,7 +403,7 @@ export default function TreatmentPlan() {
             <tbody>
               {treatments.filter(t => t.name).map((t, i) => (
                 <tr key={i}>
-                  <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.tooth === "N/A" ? "-" : "#" + t.tooth}</td>
+                  <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.teeth.length > 0 ? "#" + t.teeth.join(", #") : "-"}</td>
                   <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.name}</td>
                   <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee", textAlign: "right" }}>${(parseFloat(t.fee) || 0).toFixed(2)}</td>
                 </tr>
