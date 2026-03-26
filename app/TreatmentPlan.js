@@ -16,6 +16,7 @@ const UPGRADED_SERVICES = [
   "Jet White Prophy","Fluoride",
 ];
 
+const TEETH = ["N/A", ...Array.from({ length: 32 }, (_, i) => String(i + 1))];
 
 const FINANCING_OPTIONS = [
   { label: "No financing", months: 0 },
@@ -102,9 +103,10 @@ export default function TreatmentPlan() {
   const [patientName, setPatientName] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   // Multiple treatments
-  const [treatments, setTreatments] = useState([{ id: 1, teeth: [], name: "", fee: "" }]);
+  const [treatments, setTreatments] = useState([{ id: 1, tooth: "N/A", name: "", fee: "" }]);
   const [insuranceCoverage, setInsuranceCoverage] = useState("");
   const [financing, setFinancing] = useState(0); // months
+  const [sameDayDiscount, setSameDayDiscount] = useState(false);
   const [selectedUpgrades, setSelectedUpgrades] = useState([]);
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -115,29 +117,29 @@ export default function TreatmentPlan() {
   const [sigStep, setSigStep] = useState("patient");
 
   // Calculations
-  const totalDebit = treatments.reduce((sum, t) => sum + (parseFloat(t.fee) || 0), 0);
+  const subtotal = treatments.reduce((sum, t) => sum + (parseFloat(t.fee) || 0), 0);
+  const discountAmount = sameDayDiscount ? Math.round(subtotal * 0.20 * 100) / 100 : 0;
+  const totalDebit = Math.round((subtotal - discountAmount) * 100) / 100;
   const insuranceNum = parseFloat(insuranceCoverage) || 0;
   const creditPrice = Math.round(totalDebit * 1.03 * 100) / 100;
   const savings = Math.round((creditPrice - totalDebit) * 100) / 100;
   const monthlyPayment = financing > 0 ? Math.round((creditPrice / financing) * 100) / 100 : 0;
-  const monthlyPaymentDebit = financing > 0 ? Math.round((totalDebit / financing) * 100) / 100 : 0;
 
   const treatmentDisplay = treatments.filter(t => t.name).map(t => {
-    const toothStr = t.teeth.length > 0 ? "#" + t.teeth.join(", #") : "";
-    return [toothStr, t.name].filter(Boolean).join(" - ");
+    const tooth = t.tooth === "N/A" ? "" : "#" + t.tooth;
+    return [tooth, t.name].filter(Boolean).join(" - ");
   }).join(", ");
 
   const toggleUpgrade = (svc) => setSelectedUpgrades((prev) => prev.includes(svc) ? prev.filter((s) => s !== svc) : [...prev, svc]);
   const formComplete = patientName && treatments.some(t => t.name && t.fee);
 
-  const addTreatment = () => setTreatments(prev => [...prev, { id: Date.now(), teeth: [], name: "", fee: "" }]);
+  const addTreatment = () => setTreatments(prev => [...prev, { id: Date.now(), tooth: "N/A", name: "", fee: "" }]);
   const removeTreatment = (id) => setTreatments(prev => prev.length > 1 ? prev.filter(t => t.id !== id) : prev);
   const updateTreatment = (id, field, value) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
-  const toggleTooth = (id, num) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, teeth: t.teeth.includes(num) ? t.teeth.filter(n => n !== num) : [...t.teeth, num].sort((a, b) => a - b) } : t));
 
   const resetForm = () => {
-    setPatientName(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
-    setInsuranceCoverage(""); setFinancing(0); setSelectedUpgrades([]);
+    setPatientName(""); setTreatments([{ id: 1, tooth: "N/A", name: "", fee: "" }]);
+    setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setSelectedUpgrades([]);
     setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null);
     setShowPreview(false); setCollectSignatures(false); setSigStep("patient");
     setDate(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
@@ -227,7 +229,13 @@ export default function TreatmentPlan() {
                   <button onClick={() => removeTreatment(t.id)} style={{ position: "absolute", top: 8, right: 10, background: "none", border: "none", color: "#cc3333", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>{"\u00D7"}</button>
                 )}
                 <div style={{ fontSize: 11, fontWeight: 700, color: BLUE, marginBottom: 8 }}>Treatment {idx + 1}</div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <div style={{ flex: "0 0 80px" }}>
+                    <label style={{ ...labelStyle, marginTop: 0 }}>Tooth #</label>
+                    <select value={t.tooth} onChange={(e) => updateTreatment(t.id, "tooth", e.target.value)} style={{ ...inputStyle, padding: "10px 8px", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}>
+                      {TEETH.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
                   <div style={{ flex: 1 }}>
                     <label style={{ ...labelStyle, marginTop: 0 }}>Treatment</label>
                     <input type="text" value={t.name} onChange={(e) => updateTreatment(t.id, "name", e.target.value)} placeholder="Crown, Invisalign..." style={{ ...inputStyle, padding: "10px 12px" }} />
@@ -239,13 +247,6 @@ export default function TreatmentPlan() {
                       <input type="number" inputMode="decimal" value={t.fee} onChange={(e) => updateTreatment(t.id, "fee", e.target.value)} placeholder="0" style={{ ...inputStyle, padding: "10px 12px 10px 24px" }} />
                     </div>
                   </div>
-                </div>
-                <label style={{ ...labelStyle, marginTop: 0 }}>Tooth # <span style={{ fontWeight: 400, color: "#999" }}>{t.teeth.length > 0 ? `(${t.teeth.length} selected)` : "(optional)"}</span></label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                  {Array.from({ length: 32 }, (_, i) => i + 1).map(num => {
-                    const active = t.teeth.includes(num);
-                    return <button key={num} type="button" onClick={() => toggleTooth(t.id, num)} style={{ width: 34, height: 30, borderRadius: 6, border: `1.5px solid ${active ? BLUE : "#ddd"}`, background: active ? LIGHT_BLUE : "white", color: active ? BLUE : GRAY, fontSize: 12, fontWeight: active ? 700 : 400, cursor: "pointer", padding: 0 }}>{num}</button>;
-                  })}
                 </div>
               </div>
             ))}
@@ -260,19 +261,41 @@ export default function TreatmentPlan() {
           {/* Pricing */}
           <div style={cardStyle}>
             <div style={sectionLabel}>Pricing & Financing</div>
+
+            {/* Same Day Discount Toggle */}
+            <div onClick={() => setSameDayDiscount(!sameDayDiscount)} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, marginBottom: 8, cursor: "pointer", padding: "10px 14px", background: sameDayDiscount ? "#e6f9ee" : "#f7f9fb", border: `1.5px solid ${sameDayDiscount ? "#2d8a4e" : "#e0e0e0"}`, borderRadius: 10, transition: "all 0.2s" }}>
+              <div style={{ width: 42, height: 24, borderRadius: 12, background: sameDayDiscount ? "#2d8a4e" : "#ccc", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                <div style={{ width: 20, height: 20, borderRadius: 10, background: "white", position: "absolute", top: 2, left: sameDayDiscount ? 20 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: sameDayDiscount ? "#2d8a4e" : DARK }}>Same Day Treatment - 20% Off</div>
+                {sameDayDiscount && subtotal > 0 && <div style={{ fontSize: 12, color: "#2d8a4e" }}>Saving ${discountAmount.toFixed(2)}</div>}
+              </div>
+            </div>
+
             <label style={labelStyle}>Insurance Coverage (display only)</label>
             <div style={{ position: "relative" }}>
               <span style={dollarSign}>$</span>
               <input type="number" inputMode="decimal" value={insuranceCoverage} onChange={(e) => setInsuranceCoverage(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} />
             </div>
 
-            <label style={labelStyle}>Financing</label>
+            <label style={labelStyle}>Payment Plan</label>
             <select value={financing} onChange={(e) => setFinancing(Number(e.target.value))} style={{ ...inputStyle, appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center" }}>
               {FINANCING_OPTIONS.map((o) => <option key={o.months} value={o.months}>{o.label}</option>)}
             </select>
 
-            {totalDebit > 0 && (
+            {subtotal > 0 && (
               <div style={{ marginTop: 16, background: "#f7f9fb", borderRadius: 10, padding: 16 }}>
+                {sameDayDiscount && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13, color: GRAY }}>
+                      <span>Subtotal</span><span>${subtotal.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13, fontWeight: 700, color: "#2d8a4e" }}>
+                      <span>Same Day Discount (20%)</span><span>-${discountAmount.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 14, fontWeight: 600, color: DARK }}>
                   <span>Credit/Card Price</span><span>${creditPrice.toFixed(2)}</span>
                 </div>
@@ -289,15 +312,10 @@ export default function TreatmentPlan() {
                 )}
                 {financing > 0 && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #ddd" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700, color: DARK }}>
-                      <span>{financing} months at 0% interest</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: DARK }}>
+                      <span>{financing} months at 0% interest</span><span>${monthlyPayment.toFixed(2)}/mo</span>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: GRAY, marginTop: 4 }}>
-                      <span>Credit/Card monthly</span><span>${monthlyPayment.toFixed(2)}/mo</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: BLUE, marginTop: 4 }}>
-                      <span>Debit/Cash monthly</span><span>${monthlyPaymentDebit.toFixed(2)}/mo</span>
-                    </div>
+                    <div style={{ fontSize: 11, color: GRAY, marginTop: 2 }}>Based on credit/card price of ${creditPrice.toFixed(2)}</div>
                   </div>
                 )}
               </div>
@@ -375,7 +393,7 @@ export default function TreatmentPlan() {
             <tbody>
               {treatments.filter(t => t.name).map((t, i) => (
                 <tr key={i}>
-                  <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.teeth.length > 0 ? t.teeth.map(n => "#" + n).join(", ") : "-"}</td>
+                  <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.tooth === "N/A" ? "-" : "#" + t.tooth}</td>
                   <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee" }}>{t.name}</td>
                   <td style={{ padding: "3px 8px", borderBottom: "1px solid #eee", textAlign: "right" }}>${(parseFloat(t.fee) || 0).toFixed(2)}</td>
                 </tr>
@@ -394,6 +412,14 @@ export default function TreatmentPlan() {
           ) : UPGRADED_SERVICES.join(", ")}
         </div>
 
+        {/* Same day discount on print */}
+        {sameDayDiscount && (
+          <div style={{ background: "#e6f9ee", border: "1px solid #2d8a4e", borderRadius: 4, padding: "4px 10px", marginBottom: 6, fontSize: 10.5, textAlign: "center" }}>
+            <b style={{ color: "#2d8a4e" }}>Same Day Treatment Discount: 20% Off</b>
+            <span style={{ color: DARK, marginLeft: 8 }}>You save ${discountAmount.toFixed(2)}</span>
+          </div>
+        )}
+
         {/* Pricing */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <div>
@@ -411,8 +437,7 @@ export default function TreatmentPlan() {
         {financing > 0 && (
           <div style={{ background: GOLD_BG, border: "1px solid #D4A017", borderRadius: 4, padding: "5px 10px", marginBottom: 6, fontSize: 10.5, textAlign: "center" }}>
             <b style={{ color: GOLD }}>{financing} Month Payment Plan at 0% Interest:</b>
-            <span style={{ color: DARK, marginLeft: 8 }}>${monthlyPayment.toFixed(2)}/mo (credit)</span>
-            <span style={{ color: BLUE, marginLeft: 8, fontWeight: 700 }}>${monthlyPaymentDebit.toFixed(2)}/mo (debit/cash)</span>
+            <span style={{ color: DARK, marginLeft: 8 }}>${monthlyPayment.toFixed(2)}/mo</span>
           </div>
         )}
 
