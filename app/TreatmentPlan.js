@@ -393,57 +393,82 @@ export default function TreatmentPlan() {
 
         <div className="print-page">
           <div style={{ textAlign: "center", marginBottom: 4 }}><Logo width={190} /></div>
-          <div style={{ borderBottom: `3px solid ${BLUE}`, marginBottom: 14 }} />
-          <div style={{ textAlign: "center", fontSize: 20, fontWeight: 700, color: DARK, marginBottom: 4, textDecoration: "underline" }}>Limited Lifetime Dental Treatment Warranty Policy</div>
+          <div style={{ borderBottom: `3px solid ${BLUE}`, marginBottom: 10 }} />
+          <div style={{ textAlign: "center", fontSize: 19, fontWeight: 700, color: BLUE, marginBottom: 2 }}>Lifetime Dental Treatment Warranty</div>
+          <div style={{ textAlign: "center", fontSize: 11, color: GRAY, marginBottom: 10 }}>Your Investment, Protected for Life</div>
 
-          <div style={{ marginBottom: 12, fontSize: 12, marginTop: 14 }}>
-            <b style={{ color: GRAY }}>Patient Name: </b><span style={{ borderBottom: "1px solid #999", paddingBottom: 1, display: "inline-block", minWidth: 320 }}>{warrantyPatientName}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, fontSize: 11.5 }}>
+            <div><b style={{ color: GRAY }}>Patient: </b><span style={{ borderBottom: "1px solid #999", paddingBottom: 1, display: "inline-block", minWidth: 220 }}>{warrantyPatientName}</span></div>
+            <div><b style={{ color: GRAY }}>Date: </b><span style={{ borderBottom: "1px solid #999", paddingBottom: 1, display: "inline-block", minWidth: 120 }}>{warrantyDate}</span></div>
           </div>
 
-          <p style={{ fontSize: 11, lineHeight: 1.6, margin: "0 0 10px", color: DARK }}>
-            Our practice is proud of the dentistry we provide for you and your family. Our goal is not only to correct dental problems you may have, but also to help prevent any future dental treatment you may need.
+          <p style={{ fontSize: 10.5, lineHeight: 1.55, margin: "0 0 8px", color: DARK }}>
+            At Buchwald Family Dentistry, we are so confident in the quality of our work that we back it with a <b style={{ color: BLUE }}>Lifetime Warranty</b>. If a warranted restoration fails under normal use, we will repair or replace it at no additional charge — including re-treatment of the same tooth for the same issue. This warranty is our promise that your investment in your smile is protected.
           </p>
 
-          <p style={{ fontSize: 11, lineHeight: 1.6, margin: "0 0 10px", color: DARK }}>
-            <b>Treatment covered under this warranty:</b> Crowns, Composite Fillings, Implants, Orthodontics (First 2 replacement retainers at no charge), Preventive Resin Restoration and Scaling Root Planning
-          </p>
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: DARK, marginBottom: 6, textDecoration: "underline" }}>Eligibility Requirement for Warranty</div>
-          <div style={{ paddingLeft: 16, fontSize: 11, lineHeight: 1.7, marginBottom: 10 }}>
-            <div style={{ marginBottom: 3 }}>- <b>Regular Cleanings</b> every 6-7 months for patients with no bone loss or Perio Maintenance every 3-4 months for patients with bone loss</div>
-            <div style={{ marginBottom: 3 }}>- Wearing an <b>in-office made nightguard</b> regularly</div>
-            <div style={{ marginBottom: 3 }}>- <b>Fluoride</b> application 2 times every 12 months</div>
-            <div style={{ marginBottom: 3 }}>- <b>Laser Bacterial Reduction</b> completed at least once every 12 months</div>
-            <div style={{ marginBottom: 3 }}>- <b>Restoration Integrity Evaluation</b>, also known as an <b>&quot;InnerView&quot;</b>, done every 6 months. This service is designed to detect potential issues such as leaking crowns, loose crowns, cracks in teeth and loose implant crowns that may compromise the longevity and function of your dental work.</div>
+          <div style={{ background: LIGHT_BLUE, border: `1.5px solid ${BLUE}`, borderRadius: 4, padding: "6px 10px", marginBottom: 8, fontSize: 10, lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 700, color: BLUE, fontSize: 11, marginBottom: 2 }}>Treatments Covered Under This Warranty</div>
+            <p style={{ margin: 0 }}>Crowns, Composite Fillings, Implants, Orthodontics (first 2 replacement retainers at no charge), Preventive Resin Restoration, Scaling &amp; Root Planning, Bridges, and Veneers placed at our office.</p>
           </div>
 
-          <p style={{ fontSize: 11, fontWeight: 700, color: DARK, marginBottom: 14 }}>
-            If any of these 5 requirements are not met, then the lifetime warranty is voided.
+          {/* Value comparison */}
+          <div style={{ background: "#F9FBF2", border: "1.5px solid #8AAE2B", borderRadius: 4, padding: "6px 10px", marginBottom: 8, fontSize: 10 }}>
+            <div style={{ fontWeight: 700, color: "#5A7A10", fontSize: 11, marginBottom: 4 }}>What This Warranty Saves You</div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+              <span>Crown replacement without warranty:</span>
+              <span style={{ fontWeight: 700 }}>$2,500 – $3,000</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+              <span>Implant crown replacement without warranty:</span>
+              <span style={{ fontWeight: 700 }}>$4,000 – $6,000</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px dashed #8AAE2B", paddingTop: 3, marginTop: 2 }}>
+              <span style={{ fontWeight: 700, color: "#5A7A10" }}>With your Lifetime Warranty:</span>
+              <span style={{ fontWeight: 700, color: "#5A7A10" }}>$0</span>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: BLUE, marginBottom: 4 }}>Your Lifetime Care Plan</div>
+          <p style={{ fontSize: 10, lineHeight: 1.4, margin: "0 0 4px", color: DARK }}>
+            To keep your warranty active and your dental work lasting as long as possible, we ask that you stay current with the following preventive care. These aren't just requirements — they're the same things we'd recommend to every patient to protect their smile:
+          </p>
+          <div style={{ paddingLeft: 14, fontSize: 10, lineHeight: 1.65, marginBottom: 6 }}>
+            <div style={{ marginBottom: 2 }}>1. <b>Regular Cleanings</b> every 6-7 months (or Perio Maintenance every 3-4 months for patients with bone loss) — the foundation of long-lasting restorations</div>
+            <div style={{ marginBottom: 2 }}>2. <b>Custom Nightguard</b> ($800 value) — worn regularly, this protects your crowns, implants, and fillings from grinding and clenching, one of the top causes of restoration failure</div>
+            <div style={{ marginBottom: 2 }}>3. <b>Fluoride Treatment</b> twice per year — strengthens tooth structure around restorations and prevents decay at the margins</div>
+            <div style={{ marginBottom: 2 }}>4. <b>Laser Bacterial Reduction</b> at least once every 12 months — eliminates harmful bacteria below the gumline that can compromise restorations and gum health</div>
+            <div style={{ marginBottom: 2 }}>5. <b>InnerView Restoration Integrity Scan</b> every 6 months — our advanced diagnostic scan detects leaking crowns, loose restorations, and hidden cracks <i>before</i> they become costly problems. Think of it as an early warning system that catches a potential $2,500+ issue when it's still a $0 fix under your warranty.</div>
+          </div>
+
+          <p style={{ fontSize: 10, fontWeight: 700, color: DARK, marginBottom: 6, background: "#FFF7E0", border: "1px solid #D4A017", borderRadius: 3, padding: "4px 8px" }}>
+            If any of these 5 requirements are not maintained, the lifetime warranty coverage will be voided.
           </p>
 
-          <div style={{ fontSize: 12, marginBottom: 4 }}><b>Treatment Under Warranty:</b></div>
-          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 6, paddingBottom: 4, fontSize: 12, minHeight: 20 }}>
+          <div style={{ fontSize: 10, marginBottom: 2, color: GRAY }}><b>Warranty Effective Date:</b> Coverage begins <b>5 years</b> from the signature date of this agreement.</div>
+
+          <div style={{ fontSize: 11.5, marginBottom: 3, marginTop: 8 }}><b>Treatment Under Warranty:</b></div>
+          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 5, paddingBottom: 3, fontSize: 11.5, minHeight: 18 }}>
             {allWarrantyTreatments}
           </div>
-          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 6, minHeight: 14 }} />
-          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 14, minHeight: 14 }} />
+          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 5, minHeight: 12 }} />
+          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 10, minHeight: 12 }} />
 
-          <div style={{ marginBottom: 10, fontSize: 11, lineHeight: 1.7 }}>
-            <div style={{ marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <div style={{ width: 50, borderBottom: "1.5px solid #999", flexShrink: 0, marginTop: 8, textAlign: "center" }}>
-                {warrantyChoice === "agree" && <span style={{ fontSize: 16, fontWeight: 700 }}>{"\u2713"}</span>}
+          <div style={{ marginBottom: 8, fontSize: 10.5, lineHeight: 1.65 }}>
+            <div style={{ marginBottom: 6, display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ width: 45, borderBottom: "1.5px solid #999", flexShrink: 0, marginTop: 8, textAlign: "center" }}>
+                {warrantyChoice === "agree" && <span style={{ fontSize: 15, fontWeight: 700 }}>{"\u2713"}</span>}
               </div>
               <span><b>I agree</b> to the above conditions for the warranty of my prescribed treatment.</span>
             </div>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <div style={{ width: 50, borderBottom: "1.5px solid #999", flexShrink: 0, marginTop: 8, textAlign: "center" }}>
-                {warrantyChoice === "waive" && <span style={{ fontSize: 16, fontWeight: 700 }}>{"\u2713"}</span>}
+              <div style={{ width: 45, borderBottom: "1.5px solid #999", flexShrink: 0, marginTop: 8, textAlign: "center" }}>
+                {warrantyChoice === "waive" && <span style={{ fontSize: 15, fontWeight: 700 }}>{"\u2713"}</span>}
               </div>
               <span><b>I elect to waive</b> the warranty for my prescribed treatment and release Buchwald Family Dentistry and Orthodontics and its providers from obligation to replace or repair my dental treatment/prosthesis.</span>
             </div>
           </div>
 
-          <div style={{ marginTop: 40 }}>
+          <div style={{ marginTop: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
               <div style={{ flex: "0 0 58%" }}>
                 {warrantySig ? (
@@ -452,12 +477,12 @@ export default function TreatmentPlan() {
                     <div style={{ borderTop: "1.5px solid #999", width: "90%", marginTop: -4 }} />
                   </>
                 ) : (
-                  <div style={{ borderBottom: "1.5px solid #999", width: "90%", marginBottom: 0, minHeight: 40 }} />
+                  <div style={{ borderBottom: "1.5px solid #999", width: "90%", marginBottom: 0, minHeight: 36 }} />
                 )}
                 <div style={{ fontSize: 10, fontWeight: 700, color: DARK, marginTop: 4 }}>Signature</div>
               </div>
               <div style={{ flex: "0 0 38%" }}>
-                <div style={{ borderBottom: "1.5px solid #999", width: "100%", marginBottom: 0, paddingBottom: 4, fontSize: 12, minHeight: 18 }}>
+                <div style={{ borderBottom: "1.5px solid #999", width: "100%", marginBottom: 0, paddingBottom: 4, fontSize: 12, minHeight: 16 }}>
                   {warrantyDate}
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: DARK, marginTop: 4 }}>Date</div>
