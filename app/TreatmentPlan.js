@@ -26,6 +26,17 @@ const FINANCING_OPTIONS = [
   { label: "24 months 0%", months: 24 },
 ];
 
+const WARRANTY_TREATMENTS = [
+  "Crowns",
+  "Composite Fillings",
+  "Implants",
+  "Orthodontics",
+  "Preventive Resin Restoration",
+  "Scaling & Root Planning",
+  "Bridges",
+  "Veneers",
+];
+
 // ========== SIGNATURE PAD ==========
 function SignaturePad({ label, onSave, onClear }) {
   const canvasRef = useRef(null);
@@ -100,12 +111,13 @@ function Logo({ width = 190 }) {
 
 // ========== MAIN APP ==========
 export default function TreatmentPlan() {
+  const [appMode, setAppMode] = useState(null);
+
   const [patientName, setPatientName] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
-  // Multiple treatments
   const [treatments, setTreatments] = useState([{ id: 1, teeth: [], name: "", fee: "" }]);
   const [insuranceCoverage, setInsuranceCoverage] = useState("");
-  const [financing, setFinancing] = useState(0); // months
+  const [financing, setFinancing] = useState(0);
   const [sameDayDiscount, setSameDayDiscount] = useState(false);
   const [selectedUpgrades, setSelectedUpgrades] = useState([]);
   const [showUpgrades, setShowUpgrades] = useState(false);
@@ -115,6 +127,16 @@ export default function TreatmentPlan() {
   const [coordinatorSig, setCoordinatorSig] = useState(null);
   const [patientSig2, setPatientSig2] = useState(null);
   const [sigStep, setSigStep] = useState("patient");
+
+  // Warranty form state
+  const [warrantyPatientName, setWarrantyPatientName] = useState("");
+  const [warrantyDate, setWarrantyDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
+  const [selectedWarrantyTreatments, setSelectedWarrantyTreatments] = useState([]);
+  const [warrantyCustomTreatment, setWarrantyCustomTreatment] = useState("");
+  const [warrantyChoice, setWarrantyChoice] = useState("agree");
+  const [warrantySig, setWarrantySig] = useState(null);
+  const [showWarrantyPreview, setShowWarrantyPreview] = useState(false);
+  const [collectWarrantySig, setCollectWarrantySig] = useState(false);
 
   // Calculations
   const subtotal = treatments.reduce((sum, t) => sum + (parseFloat(t.fee) || 0), 0);
@@ -138,6 +160,17 @@ export default function TreatmentPlan() {
   const updateTreatment = (id, field, value) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
   const toggleTooth = (id, num) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, teeth: t.teeth.includes(num) ? t.teeth.filter(n => n !== num) : [...t.teeth, num].sort((a,b) => a - b) } : t));
 
+  const toggleWarrantyTreatment = (t) => setSelectedWarrantyTreatments(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+  const addCustomWarrantyTreatment = () => {
+    if (warrantyCustomTreatment.trim()) {
+      setSelectedWarrantyTreatments(prev => [...prev, warrantyCustomTreatment.trim()]);
+      setWarrantyCustomTreatment("");
+    }
+  };
+
+  const allWarrantyTreatments = selectedWarrantyTreatments.join(", ");
+  const warrantyFormComplete = warrantyPatientName && selectedWarrantyTreatments.length > 0;
+
   const resetForm = () => {
     setPatientName(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
     setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setSelectedUpgrades([]);
@@ -146,7 +179,297 @@ export default function TreatmentPlan() {
     setDate(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   };
 
-  // ========== SIGNATURE MODE ==========
+  const resetWarrantyForm = () => {
+    setWarrantyPatientName(""); setSelectedWarrantyTreatments([]); setWarrantyCustomTreatment("");
+    setWarrantyChoice("agree"); setWarrantySig(null); setShowWarrantyPreview(false); setCollectWarrantySig(false);
+    setWarrantyDate(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
+  };
+
+  // ========== MODE SELECTOR ==========
+  if (appMode === null) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+        <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 34, height: 34, background: "white", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+            <img src="/logo.png" alt="" style={{ width: 30, height: "auto" }} />
+          </div>
+          <div>
+            <div style={{ color: "white", fontSize: 16, fontWeight: 700 }}>Buchwald Family Dentistry</div>
+            <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11 }}>Patient Forms</div>
+          </div>
+        </div>
+        <div style={{ padding: "40px 16px", maxWidth: 480, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: DARK, marginBottom: 6 }}>What would you like to create?</div>
+            <div style={{ fontSize: 14, color: GRAY }}>Select a form type below</div>
+          </div>
+
+          <button onClick={() => setAppMode("treatment")} style={{ width: "100%", padding: "24px 20px", background: "white", border: "2px solid #e0e0e0", borderRadius: 14, marginBottom: 14, cursor: "pointer", textAlign: "left", transition: "all 0.2s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: LIGHT_BLUE, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📋</div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: DARK, marginBottom: 3 }}>Treatment Plan</div>
+                <div style={{ fontSize: 13, color: GRAY, lineHeight: 1.4 }}>Create a treatment plan with pricing, insurance, financing, and signatures</div>
+              </div>
+            </div>
+          </button>
+
+          <button onClick={() => setAppMode("warranty")} style={{ width: "100%", padding: "24px 20px", background: "white", border: "2px solid #e0e0e0", borderRadius: 14, marginBottom: 14, cursor: "pointer", textAlign: "left", transition: "all 0.2s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: "#FFF7E0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🛡️</div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: DARK, marginBottom: 3 }}>Lifetime Warranty Form</div>
+                <div style={{ fontSize: 13, color: GRAY, lineHeight: 1.4 }}>Document treatments covered under the lifetime warranty policy</div>
+              </div>
+            </div>
+          </button>
+
+          <div style={{ textAlign: "center", fontSize: 12, color: GRAY, padding: "16px 0" }}>Add to Home Screen for quick access</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== WARRANTY SIGNATURE COLLECTION ==========
+  if (appMode === "warranty" && collectWarrantySig && !showWarrantyPreview) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+        <style>{`@media print { body { display: none; } }`}</style>
+        <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setCollectWarrantySig(false)} style={toolbarBtn}>{"\u2190"} Back</button>
+          <div style={{ color: "white", fontSize: 16, fontWeight: 700 }}>Collect Signature</div>
+        </div>
+        <div style={{ padding: "24px 16px", maxWidth: 480, margin: "0 auto" }}>
+          <div style={{ background: "white", borderRadius: 12, padding: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: DARK }}>Patient Signature</div>
+              <div style={{ fontSize: 13, color: GRAY, marginTop: 4 }}>Hand the device to the patient to sign</div>
+            </div>
+            <div style={{ background: "#f7f9fb", borderRadius: 10, padding: "12px 14px", marginBottom: 20, fontSize: 13 }}>
+              <div><b>Patient:</b> {warrantyPatientName}</div>
+              <div><b>Choice:</b> {warrantyChoice === "agree" ? "Agrees to warranty conditions" : "Elects to waive warranty"}</div>
+              <div><b>Treatments:</b> {allWarrantyTreatments}</div>
+            </div>
+            <SignaturePad key="warranty-sig" label="Sign here"
+              onSave={(data) => setWarrantySig(data)}
+              onClear={() => setWarrantySig(null)}
+            />
+            <button onClick={() => { setCollectWarrantySig(false); setShowWarrantyPreview(true); }}
+              disabled={!warrantySig}
+              style={{ width: "100%", padding: 16, border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: warrantySig ? "pointer" : "not-allowed", background: warrantySig ? BLUE : "#ccc", color: "white" }}>
+              View Warranty Form
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== WARRANTY FORM VIEW ==========
+  if (appMode === "warranty" && !showWarrantyPreview) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+        <style>{`@media print { body { display: none; } }`}</style>
+        <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => { resetWarrantyForm(); setAppMode(null); }} style={toolbarBtn}>{"\u2190"} Back</button>
+          <div>
+            <div style={{ color: "white", fontSize: 16, fontWeight: 700 }}>Buchwald Family Dentistry</div>
+            <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11 }}>Lifetime Warranty Form</div>
+          </div>
+        </div>
+
+        <div style={{ padding: "20px 16px", maxWidth: 480, margin: "0 auto" }}>
+          <div style={cardStyle}>
+            <div style={sectionLabel}>Patient Info</div>
+            <label style={labelStyle}>Patient Name</label>
+            <input type="text" value={warrantyPatientName} onChange={(e) => setWarrantyPatientName(e.target.value)} placeholder="First Last" style={inputStyle} />
+            <label style={labelStyle}>Date</label>
+            <input type="text" value={warrantyDate} onChange={(e) => setWarrantyDate(e.target.value)} style={inputStyle} />
+          </div>
+
+          <div style={cardStyle}>
+            <div style={sectionLabel}>Treatments Under Warranty</div>
+            <div style={{ fontSize: 12, color: GRAY, marginTop: 6, marginBottom: 14 }}>Select all treatments covered for this patient</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {WARRANTY_TREATMENTS.map((t) => {
+                const selected = selectedWarrantyTreatments.includes(t);
+                return (
+                  <button key={t} onClick={() => toggleWarrantyTreatment(t)}
+                    style={{ padding: "8px 14px", borderRadius: 20, border: `1.5px solid ${selected ? BLUE : "#ddd"}`, background: selected ? LIGHT_BLUE : "white", color: selected ? BLUE : GRAY, fontSize: 13, fontWeight: selected ? 600 : 400, cursor: "pointer", transition: "all 0.15s" }}>
+                    {selected && "\u2713 "}{t}
+                  </button>
+                );
+              })}
+            </div>
+            <label style={{ ...labelStyle, marginTop: 0 }}>Add Custom Treatment</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="text" value={warrantyCustomTreatment} onChange={(e) => setWarrantyCustomTreatment(e.target.value)}
+                placeholder="Other treatment..." style={{ ...inputStyle, flex: 1 }}
+                onKeyDown={(e) => { if (e.key === "Enter") addCustomWarrantyTreatment(); }}
+              />
+              <button onClick={addCustomWarrantyTreatment}
+                style={{ padding: "12px 16px", background: warrantyCustomTreatment.trim() ? BLUE : "#ccc", color: "white", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: warrantyCustomTreatment.trim() ? "pointer" : "not-allowed", flexShrink: 0 }}>
+                + Add
+              </button>
+            </div>
+            {selectedWarrantyTreatments.filter(t => !WARRANTY_TREATMENTS.includes(t)).length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: GRAY, marginBottom: 6 }}>Custom Treatments Added:</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {selectedWarrantyTreatments.filter(t => !WARRANTY_TREATMENTS.includes(t)).map(t => (
+                    <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", background: GOLD_BG, border: `1px solid ${GOLD}`, borderRadius: 16, fontSize: 12, color: DARK }}>
+                      {t}
+                      <button onClick={() => setSelectedWarrantyTreatments(prev => prev.filter(x => x !== t))}
+                        style={{ background: "none", border: "none", color: "#cc3333", fontSize: 16, cursor: "pointer", lineHeight: 1, padding: 0 }}>{"\u00D7"}</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={cardStyle}>
+            <div style={sectionLabel}>Patient Election</div>
+            <div style={{ marginTop: 14 }}>
+              <div onClick={() => setWarrantyChoice("agree")}
+                style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 16px", background: warrantyChoice === "agree" ? "#e6f9ee" : "#f7f9fb", border: `1.5px solid ${warrantyChoice === "agree" ? "#2d8a4e" : "#e0e0e0"}`, borderRadius: 10, cursor: "pointer", marginBottom: 10, transition: "all 0.2s" }}>
+                <div style={{ width: 22, height: 22, borderRadius: 11, border: `2px solid ${warrantyChoice === "agree" ? "#2d8a4e" : "#ccc"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  {warrantyChoice === "agree" && <div style={{ width: 12, height: 12, borderRadius: 6, background: "#2d8a4e" }} />}
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: DARK }}>
+                  <b>I agree</b> to the above conditions for the warranty of my prescribed treatment.
+                </div>
+              </div>
+              <div onClick={() => setWarrantyChoice("waive")}
+                style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 16px", background: warrantyChoice === "waive" ? "#FFF3F3" : "#f7f9fb", border: `1.5px solid ${warrantyChoice === "waive" ? "#cc3333" : "#e0e0e0"}`, borderRadius: 10, cursor: "pointer", transition: "all 0.2s" }}>
+                <div style={{ width: 22, height: 22, borderRadius: 11, border: `2px solid ${warrantyChoice === "waive" ? "#cc3333" : "#ccc"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  {warrantyChoice === "waive" && <div style={{ width: 12, height: 12, borderRadius: 6, background: "#cc3333" }} />}
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: DARK }}>
+                  <b>I elect to waive</b> the warranty for my prescribed treatment and release Buchwald Family Dentistry and Orthodontics and its providers from obligation to replace or repair my dental treatment/prosthesis.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={() => setCollectWarrantySig(true)} disabled={!warrantyFormComplete}
+            style={{ width: "100%", padding: 16, background: warrantyFormComplete ? BLUE : "#ccc", color: "white", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: warrantyFormComplete ? "pointer" : "not-allowed", marginBottom: 10 }}>
+            Collect Signature
+          </button>
+          <button onClick={() => setShowWarrantyPreview(true)} disabled={!warrantyFormComplete}
+            style={{ width: "100%", padding: 16, background: "white", color: warrantyFormComplete ? BLUE : "#ccc", border: `2px solid ${warrantyFormComplete ? BLUE : "#ccc"}`, borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: warrantyFormComplete ? "pointer" : "not-allowed", marginBottom: 10 }}>
+            Preview Without Signature
+          </button>
+          <div style={{ textAlign: "center", fontSize: 12, color: GRAY, padding: "6px 0 24px" }}>Add to Home Screen for quick access</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== WARRANTY PRINT PREVIEW ==========
+  if (appMode === "warranty" && showWarrantyPreview) {
+    return (
+      <div style={{ background: "#f0f0f0", minHeight: "100vh", fontFamily: "Arial, sans-serif" }}>
+        <style>{`
+          @media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } }
+          @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; page-break-after: always; background: white; } .print-page:last-child { page-break-after: auto; } }
+        `}</style>
+
+        <div className="no-print" style={{ display: "none", position: "sticky", top: 0, zIndex: 100, background: BLUE, padding: "10px 16px", justifyContent: "space-between", alignItems: "center" }}>
+          <button onClick={() => setShowWarrantyPreview(false)} style={toolbarBtn}>{"\u2190"} Edit</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            {!warrantySig && (
+              <button onClick={() => { setShowWarrantyPreview(false); setCollectWarrantySig(true); }} style={toolbarBtn}>{"\u270D\uFE0F"} Sign</button>
+            )}
+            <button onClick={() => {
+              const subject = encodeURIComponent(`Lifetime Warranty - ${warrantyPatientName} - Buchwald Family Dentistry`);
+              const body = encodeURIComponent(`Lifetime Warranty Form\n\nPatient: ${warrantyPatientName}\nDate: ${warrantyDate}\n\nTreatments Under Warranty:\n${selectedWarrantyTreatments.map(t => `- ${t}`).join("\n")}\n\nPatient Election: ${warrantyChoice === "agree" ? "Agreed to warranty conditions" : "Elected to waive warranty"}\n\n---\nBuchwald Family Dentistry & Orthodontics`);
+              window.location.href = `mailto:?subject=${subject}&body=${body}`;
+            }} style={toolbarBtn}>{"\u2709\uFE0F"} Email</button>
+            <button onClick={() => { resetWarrantyForm(); }} style={toolbarBtn}>New</button>
+            <button onClick={() => window.print()} style={{ background: "white", color: BLUE, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Print</button>
+          </div>
+        </div>
+
+        <div className="print-page">
+          <div style={{ textAlign: "center", marginBottom: 4 }}><Logo width={190} /></div>
+          <div style={{ borderBottom: `3px solid ${BLUE}`, marginBottom: 14 }} />
+          <div style={{ textAlign: "center", fontSize: 20, fontWeight: 700, color: DARK, marginBottom: 4, textDecoration: "underline" }}>Limited Lifetime Dental Treatment Warranty Policy</div>
+
+          <div style={{ marginBottom: 12, fontSize: 12, marginTop: 14 }}>
+            <b style={{ color: GRAY }}>Patient Name: </b><span style={{ borderBottom: "1px solid #999", paddingBottom: 1, display: "inline-block", minWidth: 320 }}>{warrantyPatientName}</span>
+          </div>
+
+          <p style={{ fontSize: 11, lineHeight: 1.6, margin: "0 0 10px", color: DARK }}>
+            Our practice is proud of the dentistry we provide for you and your family. Our goal is not only to correct dental problems you may have, but also to help prevent any future dental treatment you may need.
+          </p>
+
+          <p style={{ fontSize: 11, lineHeight: 1.6, margin: "0 0 10px", color: DARK }}>
+            <b>Treatment covered under this warranty:</b> Crowns, Composite Fillings, Implants, Orthodontics (First 2 replacement retainers at no charge), Preventive Resin Restoration and Scaling Root Planning
+          </p>
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: DARK, marginBottom: 6, textDecoration: "underline" }}>Eligibility Requirement for Warranty</div>
+          <div style={{ paddingLeft: 16, fontSize: 11, lineHeight: 1.7, marginBottom: 10 }}>
+            <div style={{ marginBottom: 3 }}>- <b>Regular Cleanings</b> every 6-7 months for patients with no bone loss or Perio Maintenance every 3-4 months for patients with bone loss</div>
+            <div style={{ marginBottom: 3 }}>- Wearing an <b>in-office made nightguard</b> regularly</div>
+            <div style={{ marginBottom: 3 }}>- <b>Fluoride</b> application 2 times every 12 months</div>
+            <div style={{ marginBottom: 3 }}>- <b>Laser Bacterial Reduction</b> completed at least once every 12 months</div>
+            <div style={{ marginBottom: 3 }}>- <b>Restoration Integrity Evaluation</b>, also known as an <b>&quot;InnerView&quot;</b>, done every 6 months. This service is designed to detect potential issues such as leaking crowns, loose crowns, cracks in teeth and loose implant crowns that may compromise the longevity and function of your dental work.</div>
+          </div>
+
+          <p style={{ fontSize: 11, fontWeight: 700, color: DARK, marginBottom: 14 }}>
+            If any of these 5 requirements are not met, then the lifetime warranty is voided.
+          </p>
+
+          <div style={{ fontSize: 12, marginBottom: 4 }}><b>Treatment Under Warranty:</b></div>
+          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 6, paddingBottom: 4, fontSize: 12, minHeight: 20 }}>
+            {allWarrantyTreatments}
+          </div>
+          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 6, minHeight: 14 }} />
+          <div style={{ borderBottom: "1.5px solid #999", marginBottom: 14, minHeight: 14 }} />
+
+          <div style={{ marginBottom: 10, fontSize: 11, lineHeight: 1.7 }}>
+            <div style={{ marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ width: 50, borderBottom: "1.5px solid #999", flexShrink: 0, marginTop: 8, textAlign: "center" }}>
+                {warrantyChoice === "agree" && <span style={{ fontSize: 16, fontWeight: 700 }}>{"\u2713"}</span>}
+              </div>
+              <span><b>I agree</b> to the above conditions for the warranty of my prescribed treatment.</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ width: 50, borderBottom: "1.5px solid #999", flexShrink: 0, marginTop: 8, textAlign: "center" }}>
+                {warrantyChoice === "waive" && <span style={{ fontSize: 16, fontWeight: 700 }}>{"\u2713"}</span>}
+              </div>
+              <span><b>I elect to waive</b> the warranty for my prescribed treatment and release Buchwald Family Dentistry and Orthodontics and its providers from obligation to replace or repair my dental treatment/prosthesis.</span>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 40 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+              <div style={{ flex: "0 0 58%" }}>
+                {warrantySig ? (
+                  <>
+                    <img src={warrantySig} alt="Patient Signature" style={{ height: 50, maxWidth: "80%" }} />
+                    <div style={{ borderTop: "1.5px solid #999", width: "90%", marginTop: -4 }} />
+                  </>
+                ) : (
+                  <div style={{ borderBottom: "1.5px solid #999", width: "90%", marginBottom: 0, minHeight: 40 }} />
+                )}
+                <div style={{ fontSize: 10, fontWeight: 700, color: DARK, marginTop: 4 }}>Signature</div>
+              </div>
+              <div style={{ flex: "0 0 38%" }}>
+                <div style={{ borderBottom: "1.5px solid #999", width: "100%", marginBottom: 0, paddingBottom: 4, fontSize: 12, minHeight: 18 }}>
+                  {warrantyDate}
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: DARK, marginTop: 4 }}>Date</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ========== TREATMENT PLAN SIGNATURE MODE ==========
   if (collectSignatures && !showPreview) {
     const steps = {
       patient: { label: "Patient Signature", sub: "Hand the device to the patient to sign", next: "coordinator" },
@@ -192,15 +515,13 @@ export default function TreatmentPlan() {
     );
   }
 
-  // ========== FORM VIEW ==========
-  if (!showPreview) {
+  // ========== TREATMENT PLAN FORM VIEW ==========
+  if (appMode === "treatment" && !showPreview) {
     return (
       <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
         <style>{`@media print { body { display: none; } }`}</style>
         <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 34, height: 34, background: "white", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-            <img src="/logo.png" alt="" style={{ width: 30, height: "auto" }} />
-          </div>
+          <button onClick={() => { resetForm(); setAppMode(null); }} style={toolbarBtn}>{"\u2190"} Back</button>
           <div>
             <div style={{ color: "white", fontSize: 16, fontWeight: 700 }}>Buchwald Family Dentistry</div>
             <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11 }}>Treatment Plan Generator</div>
@@ -208,7 +529,6 @@ export default function TreatmentPlan() {
         </div>
 
         <div style={{ padding: "20px 16px", maxWidth: 480, margin: "0 auto" }}>
-          {/* Patient Info */}
           <div style={cardStyle}>
             <div style={sectionLabel}>Patient Info</div>
             <label style={labelStyle}>Patient Name</label>
@@ -217,7 +537,6 @@ export default function TreatmentPlan() {
             <input type="text" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
           </div>
 
-          {/* Treatments */}
           <div style={cardStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={sectionLabel}>Treatments</div>
@@ -268,11 +587,8 @@ export default function TreatmentPlan() {
             )}
           </div>
 
-          {/* Pricing */}
           <div style={cardStyle}>
             <div style={sectionLabel}>Pricing & Financing</div>
-
-            {/* Same Day Discount Toggle */}
             <div onClick={() => setSameDayDiscount(!sameDayDiscount)} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, marginBottom: 8, cursor: "pointer", padding: "10px 14px", background: sameDayDiscount ? "#e6f9ee" : "#f7f9fb", border: `1.5px solid ${sameDayDiscount ? "#2d8a4e" : "#e0e0e0"}`, borderRadius: 10, transition: "all 0.2s" }}>
               <div style={{ width: 42, height: 24, borderRadius: 12, background: sameDayDiscount ? "#2d8a4e" : "#ccc", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                 <div style={{ width: 20, height: 20, borderRadius: 10, background: "white", position: "absolute", top: 2, left: sameDayDiscount ? 20 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
@@ -332,7 +648,6 @@ export default function TreatmentPlan() {
             )}
           </div>
 
-          {/* Upgrades */}
           <div style={cardStyle}>
             <div onClick={() => setShowUpgrades(!showUpgrades)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
               <div>
@@ -361,7 +676,7 @@ export default function TreatmentPlan() {
     );
   }
 
-  // ========== PRINT PREVIEW ==========
+  // ========== TREATMENT PLAN PRINT PREVIEW ==========
   return (
     <div style={{ background: "#f0f0f0", minHeight: "100vh", fontFamily: "Arial, sans-serif" }}>
       <style>{`
@@ -373,6 +688,14 @@ export default function TreatmentPlan() {
         <button onClick={() => setShowPreview(false)} style={toolbarBtn}>{"\u2190"} Edit</button>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={() => { setShowPreview(false); setCollectSignatures(true); setSigStep("patient"); }} style={toolbarBtn}>{"\u270D\uFE0F"} Sign</button>
+          <button onClick={() => {
+            const subject = encodeURIComponent(`Treatment Plan - ${patientName} - Buchwald Family Dentistry`);
+            const body = encodeURIComponent(`Treatment Plan Summary\n\nPatient: ${patientName}\nDate: ${date}\n\nTreatments:\n${treatments.filter(t => t.name).map(t => {
+              const teethStr = t.teeth.length > 0 ? "Tooth #" + t.teeth.join(", #") + " - " : "";
+              return `- ${teethStr}${t.name}: $${(parseFloat(t.fee) || 0).toFixed(2)}`;
+            }).join("\n")}\n\nCredit/Card Price: $${creditPrice.toFixed(2)}\nDebit/Cash/Check Price: $${totalDebit.toFixed(2)}${sameDayDiscount ? `\nSame Day Discount (20%): -$${discountAmount.toFixed(2)}` : ""}${financing > 0 ? `\n${financing} Month Payment Plan: $${monthlyPayment.toFixed(2)}/mo at 0% interest` : ""}${insuranceNum > 0 ? `\nInsurance Coverage: $${insuranceNum.toFixed(2)}` : ""}\n\nPayment Options:\n1. Pay in full at appointment\n2. For crowns: Half at prep, half at seat\n3. 6-month CareCredit at 0%\n4. Cherry financing as low as 0%\n\n---\nBuchwald Family Dentistry & Orthodontics`);
+            window.location.href = `mailto:?subject=${subject}&body=${body}`;
+          }} style={toolbarBtn}>{"\u2709\uFE0F"} Email</button>
           <button onClick={resetForm} style={toolbarBtn}>New</button>
           <button onClick={() => window.print()} style={{ background: "white", color: BLUE, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Print</button>
         </div>
@@ -392,7 +715,6 @@ export default function TreatmentPlan() {
           <b style={{ color: GRAY }}>Treatment Needs: </b><span style={{ borderBottom: "1px solid #ccc", paddingBottom: 1, display: "inline-block", minWidth: 350 }}>{treatmentDisplay}</span>
         </div>
 
-        {/* Treatment breakdown table */}
         {treatments.filter(t => t.name).length > 1 && (
           <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 8, fontSize: 10.5 }}>
             <thead><tr>
@@ -422,7 +744,6 @@ export default function TreatmentPlan() {
           ) : UPGRADED_SERVICES.join(", ")}
         </div>
 
-        {/* Same day discount on print */}
         {sameDayDiscount && (
           <div style={{ background: "#e6f9ee", border: "1px solid #2d8a4e", borderRadius: 4, padding: "4px 10px", marginBottom: 6, fontSize: 10.5, textAlign: "center" }}>
             <b style={{ color: "#2d8a4e" }}>Same Day Treatment Discount: 20% Off</b>
@@ -430,7 +751,6 @@ export default function TreatmentPlan() {
           </div>
         )}
 
-        {/* Pricing */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700 }}>Patient Pays: <span style={{ fontSize: 15 }}>${creditPrice.toFixed(2)}</span></div>
@@ -443,7 +763,6 @@ export default function TreatmentPlan() {
           </div>
         </div>
 
-        {/* Financing callout */}
         {financing > 0 && (
           <div style={{ background: GOLD_BG, border: "1px solid #D4A017", borderRadius: 4, padding: "5px 10px", marginBottom: 6, fontSize: 10.5, textAlign: "center" }}>
             <b style={{ color: GOLD }}>{financing} Month Payment Plan at 0% Interest:</b>
