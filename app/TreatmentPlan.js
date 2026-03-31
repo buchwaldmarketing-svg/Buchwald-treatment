@@ -131,7 +131,7 @@ export default function TreatmentPlan() {
   // Warranty form state
   const [warrantyPatientName, setWarrantyPatientName] = useState("");
   const [warrantyDate, setWarrantyDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
-  const [selectedWarrantyTreatments, setSelectedWarrantyTreatments] = useState([]);
+  const [warrantyItems, setWarrantyItems] = useState([]);
   const [warrantyCustomTreatment, setWarrantyCustomTreatment] = useState("");
   const [warrantyChoice, setWarrantyChoice] = useState("agree");
   const [warrantySig, setWarrantySig] = useState(null);
@@ -160,16 +160,27 @@ export default function TreatmentPlan() {
   const updateTreatment = (id, field, value) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
   const toggleTooth = (id, num) => setTreatments(prev => prev.map(t => t.id === id ? { ...t, teeth: t.teeth.includes(num) ? t.teeth.filter(n => n !== num) : [...t.teeth, num].sort((a,b) => a - b) } : t));
 
-  const toggleWarrantyTreatment = (t) => setSelectedWarrantyTreatments(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+  const toggleWarrantyTreatment = (t) => setWarrantyItems(prev => {
+    const exists = prev.find(x => x.name === t);
+    if (exists) return prev.filter(x => x.name !== t);
+    return [...prev, { name: t, teeth: [] }];
+  });
+  const toggleWarrantyTooth = (treatmentName, num) => setWarrantyItems(prev => prev.map(item =>
+    item.name === treatmentName ? { ...item, teeth: item.teeth.includes(num) ? item.teeth.filter(n => n !== num) : [...item.teeth, num].sort((a,b) => a - b) } : item
+  ));
   const addCustomWarrantyTreatment = () => {
     if (warrantyCustomTreatment.trim()) {
-      setSelectedWarrantyTreatments(prev => [...prev, warrantyCustomTreatment.trim()]);
+      setWarrantyItems(prev => [...prev, { name: warrantyCustomTreatment.trim(), teeth: [] }]);
       setWarrantyCustomTreatment("");
     }
   };
 
-  const allWarrantyTreatments = selectedWarrantyTreatments.join(", ");
-  const warrantyFormComplete = warrantyPatientName && selectedWarrantyTreatments.length > 0;
+  const selectedWarrantyTreatments = warrantyItems.map(x => x.name);
+  const allWarrantyTreatments = warrantyItems.map(item => {
+    if (item.teeth.length > 0) return item.name + " (#" + item.teeth.join(", #") + ")";
+    return item.name;
+  }).join(", ");
+  const warrantyFormComplete = warrantyPatientName && warrantyItems.length > 0;
 
   const resetForm = () => {
     setPatientName(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
@@ -180,7 +191,7 @@ export default function TreatmentPlan() {
   };
 
   const resetWarrantyForm = () => {
-    setWarrantyPatientName(""); setSelectedWarrantyTreatments([]); setWarrantyCustomTreatment("");
+    setWarrantyPatientName(""); setWarrantyItems([]); setWarrantyCustomTreatment("");
     setWarrantyChoice("agree"); setWarrantySig(null); setShowWarrantyPreview(false); setCollectWarrantySig(false);
     setWarrantyDate(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   };
@@ -289,8 +300,8 @@ export default function TreatmentPlan() {
 
           <div style={cardStyle}>
             <div style={sectionLabel}>Treatments Under Warranty</div>
-            <div style={{ fontSize: 12, color: GRAY, marginTop: 6, marginBottom: 14 }}>Select all treatments covered for this patient</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: GRAY, marginTop: 6, marginBottom: 14 }}>Select treatments and assign tooth numbers</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {WARRANTY_TREATMENTS.map((t) => {
                 const selected = selectedWarrantyTreatments.includes(t);
                 return (
@@ -301,7 +312,44 @@ export default function TreatmentPlan() {
                 );
               })}
             </div>
-            <label style={{ ...labelStyle, marginTop: 0 }}>Add Custom Treatment</label>
+
+            {/* Tooth grids for selected treatments */}
+            {warrantyItems.map((item) => {
+              const isPreset = WARRANTY_TREATMENTS.includes(item.name);
+              const needsTeeth = ["Crowns", "Composite Fillings", "Implants", "Bridges", "Veneers", "Preventive Resin Restoration"].includes(item.name) || !isPreset;
+              return (
+                <div key={item.name} style={{ background: "#f7f9fb", borderRadius: 10, padding: "12px 14px", marginBottom: 10, position: "relative" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: needsTeeth ? 8 : 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: BLUE }}>{item.name}</div>
+                    {!isPreset && (
+                      <button onClick={() => setWarrantyItems(prev => prev.filter(x => x.name !== item.name))}
+                        style={{ background: "none", border: "none", color: "#cc3333", fontSize: 18, cursor: "pointer", lineHeight: 1 }}>{"\u00D7"}</button>
+                    )}
+                  </div>
+                  {item.teeth.length > 0 && (
+                    <div style={{ fontSize: 11, color: BLUE, fontWeight: 600, marginBottom: 6 }}>Teeth: #{item.teeth.join(", #")}</div>
+                  )}
+                  {needsTeeth && (
+                    <>
+                      <div style={{ fontSize: 11, color: GRAY, marginBottom: 6 }}>Select tooth numbers <span style={{ fontWeight: 400, color: "#999" }}>(optional)</span></div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 5 }}>
+                        {Array.from({ length: 32 }, (_, i) => i + 1).map((num) => {
+                          const sel = item.teeth.includes(num);
+                          return (
+                            <button key={num} onClick={() => toggleWarrantyTooth(item.name, num)}
+                              style={{ padding: "7px 0", borderRadius: 8, border: `1.5px solid ${sel ? BLUE : "#ddd"}`, background: sel ? BLUE : "white", color: sel ? "white" : DARK, fontSize: 12, fontWeight: sel ? 700 : 400, cursor: "pointer", transition: "all 0.15s" }}>
+                              {num}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            <label style={{ ...labelStyle, marginTop: warrantyItems.length > 0 ? 8 : 0 }}>Add Custom Treatment</label>
             <div style={{ display: "flex", gap: 8 }}>
               <input type="text" value={warrantyCustomTreatment} onChange={(e) => setWarrantyCustomTreatment(e.target.value)}
                 placeholder="Other treatment..." style={{ ...inputStyle, flex: 1 }}
@@ -312,20 +360,6 @@ export default function TreatmentPlan() {
                 + Add
               </button>
             </div>
-            {selectedWarrantyTreatments.filter(t => !WARRANTY_TREATMENTS.includes(t)).length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: GRAY, marginBottom: 6 }}>Custom Treatments Added:</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {selectedWarrantyTreatments.filter(t => !WARRANTY_TREATMENTS.includes(t)).map(t => (
-                    <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", background: GOLD_BG, border: `1px solid ${GOLD}`, borderRadius: 16, fontSize: 12, color: DARK }}>
-                      {t}
-                      <button onClick={() => setSelectedWarrantyTreatments(prev => prev.filter(x => x !== t))}
-                        style={{ background: "none", border: "none", color: "#cc3333", fontSize: 16, cursor: "pointer", lineHeight: 1, padding: 0 }}>{"\u00D7"}</button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           <div style={cardStyle}>
@@ -383,7 +417,7 @@ export default function TreatmentPlan() {
             )}
             <button onClick={() => {
               const subject = encodeURIComponent(`Lifetime Warranty - ${warrantyPatientName} - Buchwald Family Dentistry`);
-              const body = encodeURIComponent(`Lifetime Warranty Form\n\nPatient: ${warrantyPatientName}\nDate: ${warrantyDate}\n\nTreatments Under Warranty:\n${selectedWarrantyTreatments.map(t => `- ${t}`).join("\n")}\n\nPatient Election: ${warrantyChoice === "agree" ? "Agreed to warranty conditions" : "Elected to waive warranty"}\n\n---\nBuchwald Family Dentistry & Orthodontics`);
+              const body = encodeURIComponent(`Lifetime Warranty Form\n\nPatient: ${warrantyPatientName}\nDate: ${warrantyDate}\n\nTreatments Under Warranty:\n${warrantyItems.map(item => `- ${item.name}${item.teeth.length > 0 ? " (Teeth #" + item.teeth.join(", #") + ")" : ""}`).join("\n")}\n\nPatient Election: ${warrantyChoice === "agree" ? "Agreed to warranty conditions" : "Elected to waive warranty"}\n\n---\nBuchwald Family Dentistry & Orthodontics`);
               window.location.href = `mailto:?subject=${subject}&body=${body}`;
             }} style={toolbarBtn}>{"\u2709\uFE0F"} Email</button>
             <button onClick={() => { resetWarrantyForm(); }} style={toolbarBtn}>New</button>
@@ -434,7 +468,7 @@ export default function TreatmentPlan() {
           </p>
           <div style={{ paddingLeft: 14, fontSize: 10, lineHeight: 1.65, marginBottom: 6 }}>
             <div style={{ marginBottom: 2 }}>1. <b>Regular Cleanings</b> every 6-7 months (or Perio Maintenance every 3-4 months for patients with bone loss) — the foundation of long-lasting restorations</div>
-            <div style={{ marginBottom: 2 }}>2. <b>Custom Nightguard</b> ($800 value) — worn regularly, this protects your crowns, implants, and fillings from grinding and clenching, one of the top causes of restoration failure</div>
+            <div style={{ marginBottom: 2 }}>2. <b>Custom Nightguard</b> (starting at $400 depending on insurance) — worn regularly, this protects your crowns, implants, and fillings from grinding and clenching, one of the top causes of restoration failure</div>
             <div style={{ marginBottom: 2 }}>3. <b>Fluoride Treatment</b> twice per year — strengthens tooth structure around restorations and prevents decay at the margins</div>
             <div style={{ marginBottom: 2 }}>4. <b>Laser Bacterial Reduction</b> at least once every 12 months — eliminates harmful bacteria below the gumline that can compromise restorations and gum health</div>
             <div style={{ marginBottom: 2 }}>5. <b>InnerView Restoration Integrity Scan</b> every 6 months — our advanced diagnostic scan detects leaking crowns, loose restorations, and hidden cracks <i>before</i> they become costly problems. Think of it as an early warning system that catches a potential $2,500+ issue when it's still a $0 fix under your warranty.</div>
