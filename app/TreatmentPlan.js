@@ -1,6 +1,19 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 
+function savePDF(elementId, filename) {
+  if (!window.html2pdf) { alert("PDF library loading, please try again in a moment."); return; }
+  const el = document.getElementById(elementId);
+  window.html2pdf().set({
+    margin: [0.4, 0.5],
+    filename,
+    image: { type: "jpeg", quality: 0.97 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+    pagebreak: { mode: ["css", "legacy"] },
+  }).from(el).save();
+}
+
 const BLUE = "#0098D4";
 const DARK = "#1A1A1A";
 const GRAY = "#666666";
@@ -113,12 +126,22 @@ function Logo({ width = 190 }) {
 export default function TreatmentPlan() {
   const [appMode, setAppMode] = useState(null);
 
+  useEffect(() => {
+    if (!document.getElementById("html2pdf-script")) {
+      const s = document.createElement("script");
+      s.id = "html2pdf-script";
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      document.head.appendChild(s);
+    }
+  }, []);
+
   const [patientName, setPatientName] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   const [treatments, setTreatments] = useState([{ id: 1, teeth: [], name: "", fee: "" }]);
   const [insuranceCoverage, setInsuranceCoverage] = useState("");
   const [financing, setFinancing] = useState(0);
   const [sameDayDiscount, setSameDayDiscount] = useState(false);
+  const [inOfficePlan, setInOfficePlan] = useState(false);
   const [selectedUpgrades, setSelectedUpgrades] = useState([]);
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -140,7 +163,9 @@ export default function TreatmentPlan() {
 
   // Calculations
   const subtotal = treatments.reduce((sum, t) => sum + (parseFloat(t.fee) || 0), 0);
-  const discountAmount = sameDayDiscount ? Math.round(subtotal * 0.20 * 100) / 100 : 0;
+  const activeDiscount = sameDayDiscount || inOfficePlan;
+  const discountLabel = sameDayDiscount ? "Same Day Discount (20%)" : "In-Office Plan Discount (20%)";
+  const discountAmount = activeDiscount ? Math.round(subtotal * 0.20 * 100) / 100 : 0;
   const totalDebit = Math.round((subtotal - discountAmount) * 100) / 100;
   const insuranceNum = parseFloat(insuranceCoverage) || 0;
   const creditPrice = Math.round(totalDebit * 1.03 * 100) / 100;
@@ -184,7 +209,7 @@ export default function TreatmentPlan() {
 
   const resetForm = () => {
     setPatientName(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
-    setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setSelectedUpgrades([]);
+    setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]);
     setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null);
     setShowPreview(false); setCollectSignatures(false); setSigStep("patient");
     setDate(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
@@ -421,10 +446,12 @@ export default function TreatmentPlan() {
               window.location.href = `mailto:?subject=${subject}&body=${body}`;
             }} style={toolbarBtn}>{"\u2709\uFE0F"} Email</button>
             <button onClick={() => { resetWarrantyForm(); }} style={toolbarBtn}>New</button>
+            <button onClick={() => savePDF("warranty-pdf-content", `Warranty_${warrantyPatientName || "Form"}.pdf`)} style={toolbarBtn}>⬇️ PDF</button>
             <button onClick={() => window.print()} style={{ background: "white", color: BLUE, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Print</button>
           </div>
         </div>
 
+        <div id="warranty-pdf-content">
         <div className="print-page">
           <div style={{ textAlign: "center", marginBottom: 4 }}><Logo width={190} /></div>
           <div style={{ borderBottom: `3px solid ${BLUE}`, marginBottom: 10 }} />
@@ -524,6 +551,7 @@ export default function TreatmentPlan() {
             </div>
           </div>
         </div>
+        </div> {/* end warranty-pdf-content */}
       </div>
     );
   }
@@ -648,13 +676,23 @@ export default function TreatmentPlan() {
 
           <div style={cardStyle}>
             <div style={sectionLabel}>Pricing & Financing</div>
-            <div onClick={() => setSameDayDiscount(!sameDayDiscount)} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, marginBottom: 8, cursor: "pointer", padding: "10px 14px", background: sameDayDiscount ? "#e6f9ee" : "#f7f9fb", border: `1.5px solid ${sameDayDiscount ? "#2d8a4e" : "#e0e0e0"}`, borderRadius: 10, transition: "all 0.2s" }}>
+            <div onClick={() => { setSameDayDiscount(!sameDayDiscount); if (!sameDayDiscount) setInOfficePlan(false); }} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, marginBottom: 8, cursor: "pointer", padding: "10px 14px", background: sameDayDiscount ? "#e6f9ee" : "#f7f9fb", border: `1.5px solid ${sameDayDiscount ? "#2d8a4e" : "#e0e0e0"}`, borderRadius: 10, transition: "all 0.2s" }}>
               <div style={{ width: 42, height: 24, borderRadius: 12, background: sameDayDiscount ? "#2d8a4e" : "#ccc", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                 <div style={{ width: 20, height: 20, borderRadius: 10, background: "white", position: "absolute", top: 2, left: sameDayDiscount ? 20 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
               </div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: sameDayDiscount ? "#2d8a4e" : DARK }}>Same Day Treatment - 20% Off</div>
                 {sameDayDiscount && subtotal > 0 && <div style={{ fontSize: 12, color: "#2d8a4e" }}>Saving ${discountAmount.toFixed(2)}</div>}
+              </div>
+            </div>
+
+            <div onClick={() => { setInOfficePlan(!inOfficePlan); if (!inOfficePlan) setSameDayDiscount(false); }} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, cursor: "pointer", padding: "10px 14px", background: inOfficePlan ? "#e6f9ee" : "#f7f9fb", border: `1.5px solid ${inOfficePlan ? "#2d8a4e" : "#e0e0e0"}`, borderRadius: 10, transition: "all 0.2s" }}>
+              <div style={{ width: 42, height: 24, borderRadius: 12, background: inOfficePlan ? "#2d8a4e" : "#ccc", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                <div style={{ width: 20, height: 20, borderRadius: 10, background: "white", position: "absolute", top: 2, left: inOfficePlan ? 20 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: inOfficePlan ? "#2d8a4e" : DARK }}>In-Office Plan Member - 20% Off</div>
+                {inOfficePlan && subtotal > 0 && <div style={{ fontSize: 12, color: "#2d8a4e" }}>Saving ${discountAmount.toFixed(2)}</div>}
               </div>
             </div>
 
@@ -671,13 +709,13 @@ export default function TreatmentPlan() {
 
             {subtotal > 0 && (
               <div style={{ marginTop: 16, background: "#f7f9fb", borderRadius: 10, padding: 16 }}>
-                {sameDayDiscount && (
+                {activeDiscount && (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 13, color: GRAY }}>
                       <span>Subtotal</span><span>${subtotal.toFixed(2)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13, fontWeight: 700, color: "#2d8a4e" }}>
-                      <span>Same Day Discount (20%)</span><span>-${discountAmount.toFixed(2)}</span>
+                      <span>{discountLabel}</span><span>-${discountAmount.toFixed(2)}</span>
                     </div>
                   </>
                 )}
@@ -752,14 +790,16 @@ export default function TreatmentPlan() {
             const body = encodeURIComponent(`Treatment Plan Summary\n\nPatient: ${patientName}\nDate: ${date}\n\nTreatments:\n${treatments.filter(t => t.name).map(t => {
               const teethStr = t.teeth.length > 0 ? "Tooth #" + t.teeth.join(", #") + " - " : "";
               return `- ${teethStr}${t.name}: $${(parseFloat(t.fee) || 0).toFixed(2)}`;
-            }).join("\n")}\n\nCredit/Card Price: $${creditPrice.toFixed(2)}\nDebit/Cash/Check Price: $${totalDebit.toFixed(2)}${sameDayDiscount ? `\nSame Day Discount (20%): -$${discountAmount.toFixed(2)}` : ""}${financing > 0 ? `\n${financing} Month Payment Plan: $${monthlyPayment.toFixed(2)}/mo at 0% interest` : ""}${insuranceNum > 0 ? `\nInsurance Coverage: $${insuranceNum.toFixed(2)}` : ""}\n\nPayment Options:\n1. Pay in full at appointment\n2. For crowns: Half at prep, half at seat\n3. 6-month CareCredit at 0%\n4. Cherry financing as low as 0%\n\n---\nBuchwald Family Dentistry & Orthodontics`);
+            }).join("\n")}\n\nCredit/Card Price: $${creditPrice.toFixed(2)}\nDebit/Cash/Check Price: $${totalDebit.toFixed(2)}${activeDiscount ? `\n${discountLabel}: -$${discountAmount.toFixed(2)}` : ""}${financing > 0 ? `\n${financing} Month Payment Plan: $${monthlyPayment.toFixed(2)}/mo at 0% interest` : ""}${insuranceNum > 0 ? `\nInsurance Coverage: $${insuranceNum.toFixed(2)}` : ""}\n\nPayment Options:\n1. Pay in full at appointment\n2. For crowns: Half at prep, half at seat\n3. 6-month CareCredit at 0%\n4. Cherry financing as low as 0%\n\n---\nBuchwald Family Dentistry & Orthodontics`);
             window.location.href = `mailto:?subject=${subject}&body=${body}`;
           }} style={toolbarBtn}>{"\u2709\uFE0F"} Email</button>
           <button onClick={resetForm} style={toolbarBtn}>New</button>
+          <button onClick={() => savePDF("tp-pdf", `TreatmentPlan_${patientName || "Patient"}.pdf`)} style={toolbarBtn}>⬇️ PDF</button>
           <button onClick={() => window.print()} style={{ background: "white", color: BLUE, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Print</button>
         </div>
       </div>
 
+      <div id="tp-pdf">
       {/* PAGE 1 */}
       <div className="print-page">
         <div style={{ textAlign: "center", marginBottom: 4 }}><Logo width={190} /></div>
@@ -803,9 +843,9 @@ export default function TreatmentPlan() {
           ) : UPGRADED_SERVICES.join(", ")}
         </div>
 
-        {sameDayDiscount && (
+        {activeDiscount && (
           <div style={{ background: "#e6f9ee", border: "1px solid #2d8a4e", borderRadius: 4, padding: "4px 10px", marginBottom: 6, fontSize: 10.5, textAlign: "center" }}>
-            <b style={{ color: "#2d8a4e" }}>Same Day Treatment Discount: 20% Off</b>
+            <b style={{ color: "#2d8a4e" }}>{discountLabel}</b>
             <span style={{ color: DARK, marginLeft: 8 }}>You save ${discountAmount.toFixed(2)}</span>
           </div>
         )}
@@ -904,6 +944,7 @@ export default function TreatmentPlan() {
         <div style={{ fontSize: 11, marginBottom: 2 }}><b style={{ color: GRAY }}>Patient Name (Print): </b><span style={{ borderBottom: "1px solid #ccc", display: "inline-block", minWidth: 280 }}>{patientName}</span></div>
         <div style={{ marginTop: 8 }}><SigBlock sig={patientSig2} label="Patient Signature" dateStr={date} /></div>
       </div>
+      </div> {/* end tp-pdf */}
     </div>
   );
 }
