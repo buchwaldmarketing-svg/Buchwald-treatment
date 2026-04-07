@@ -146,6 +146,8 @@ export default function TreatmentPlan() {
   const [selectedUpgrades, setSelectedUpgrades] = useState([]);
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [savedToProfile, setSavedToProfile] = useState(false);
+  const [savingToProfile, setSavingToProfile] = useState(false);
   const [collectSignatures, setCollectSignatures] = useState(false);
   const [patientSig, setPatientSig] = useState(null);
   const [coordinatorSig, setCoordinatorSig] = useState(null);
@@ -213,6 +215,7 @@ export default function TreatmentPlan() {
     setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]);
     setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null);
     setShowPreview(false); setCollectSignatures(false); setSigStep("patient");
+    setSavedToProfile(false); setSavingToProfile(false);
     setDate(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   };
 
@@ -1141,13 +1144,29 @@ export default function TreatmentPlan() {
             )}
           </div>
 
-          <button onClick={() => {
-            setShowPreview(true);
-            // Save to Supabase
+          {/* Save to Profile */}
+          <button onClick={async () => {
+            if (!patientName.trim()) return;
+            setSavingToProfile(true);
             const [firstName, ...rest] = patientName.trim().split(" ");
             const lastName = rest.join(" ") || "-";
             const summary = `Date: ${date} | Treatments: ${treatments.filter(t=>t.name).map(t=>`${t.name}${t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", ")} | Total: $${totalDebit.toFixed(2)}${activeDiscount?" | "+discountLabel:""}`;
-            savePatientRecord(firstName, lastName, "Treatment Plan", { total: totalDebit, summary, email: patientEmail, inOfficePlan });
+            await savePatientRecord(firstName, lastName, "Treatment Plan", { total: totalDebit, summary, email: patientEmail, inOfficePlan });
+            setSavingToProfile(false);
+            setSavedToProfile(true);
+          }} disabled={!patientName.trim() || savingToProfile}
+            style={{ width: "100%", padding: 14, background: savedToProfile ? "#e6f9ee" : "white", color: savedToProfile ? "#2d8a4e" : patientName.trim() ? BLUE : GRAY, border: `2px solid ${savedToProfile ? "#2d8a4e" : patientName.trim() ? BLUE : "#ddd"}`, borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: patientName.trim() ? "pointer" : "not-allowed", marginBottom: 10 }}>
+            {savingToProfile ? "Saving..." : savedToProfile ? "✓ Saved to Profile" : "💾 Save to Profile"}
+          </button>
+
+          <button onClick={() => {
+            setShowPreview(true);
+            if (!savedToProfile && patientName.trim()) {
+              const [firstName, ...rest] = patientName.trim().split(" ");
+              const lastName = rest.join(" ") || "-";
+              const summary = `Date: ${date} | Treatments: ${treatments.filter(t=>t.name).map(t=>`${t.name}${t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", ")} | Total: $${totalDebit.toFixed(2)}${activeDiscount?" | "+discountLabel:""}`;
+              savePatientRecord(firstName, lastName, "Treatment Plan", { total: totalDebit, summary, email: patientEmail, inOfficePlan });
+            }
           }} disabled={!formComplete}
             style={{ width: "100%", padding: 16, background: formComplete ? BLUE : "#ccc", color: "white", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: formComplete ? "pointer" : "not-allowed", marginBottom: 10 }}>
             Generate Treatment Plan
