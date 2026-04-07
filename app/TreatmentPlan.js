@@ -55,6 +55,24 @@ function db_updateTreatmentStatus(id, status) { const all = db_load("treatments"
 function db_getNotes(pid) { return db_load("notes", []).filter(n => n.patient_id === pid).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); }
 function db_saveNote(pid, note) { const all = db_load("notes", []); all.unshift({ id: crypto.randomUUID(), patient_id: pid, note, created_at: new Date().toISOString() }); db_save("notes", all); }
 function db_getAllTreatments() { return db_load("treatments", []); }
+function db_deletePatient(pid) {
+  db_save("patients", db_getPatients().filter(p => p.id !== pid));
+  db_save("treatments", db_load("treatments", []).filter(t => t.patient_id !== pid));
+  db_save("notes", db_load("notes", []).filter(n => n.patient_id !== pid));
+  db_save("cleanings", db_load("cleanings", []).filter(c => c.patient_id !== pid));
+}
+function db_enrollPlan(pid) {
+  const patients = db_getPatients(); const idx = patients.findIndex(p => p.id === pid);
+  if (idx >= 0) { patients[idx].plan_status = "active"; patients[idx].plan_start_date = new Date().toISOString().split("T")[0]; patients[idx].updated_at = new Date().toISOString(); db_save("patients", patients); }
+}
+function db_unenrollPlan(pid) {
+  const patients = db_getPatients(); const idx = patients.findIndex(p => p.id === pid);
+  if (idx >= 0) { patients[idx].plan_status = "none"; patients[idx].updated_at = new Date().toISOString(); db_save("patients", patients); }
+}
+function db_getCleanings(pid) { return db_load("cleanings", []).filter(c => c.patient_id === pid).sort((a, b) => new Date(b.date) - new Date(a.date)); }
+function db_addCleaning(pid) { const all = db_load("cleanings", []); all.unshift({ id: crypto.randomUUID(), patient_id: pid, date: new Date().toISOString() }); db_save("cleanings", all); }
+function db_getCleaningsThisYear(pid) { const year = new Date().getFullYear(); return db_load("cleanings", []).filter(c => c.patient_id === pid && new Date(c.date).getFullYear() === year).length; }
+function db_removeCleaning(cid) { db_save("cleanings", db_load("cleanings", []).filter(c => c.id !== cid)); }
 
 // ========== GMAIL APP LINK ==========
 // Uses mailto: which on mobile opens the default mail app (Gmail if set as default)
@@ -172,7 +190,6 @@ export default function TreatmentPlan() {
     if (!patient) patient = { id: crypto.randomUUID(), first_name: fn, last_name: ln };
     if (patientEmail) patient.email = patientEmail;
     if (patientPhone) patient.phone = patientPhone;
-    if (inOfficePlan) { patient.plan_status = "active"; patient.plan_start_date = new Date().toISOString().split("T")[0]; }
     db_savePatient(patient);
     db_saveTreatment({ patient_id: patient.id, type: recordType, cost: details.total || 0, status: "presented", summary: details.summary });
     setSavedToProfile(true);
@@ -206,9 +223,14 @@ export default function TreatmentPlan() {
     const pts = db_getTreatments(selectedPatient.id);
     const notes = db_getNotes(selectedPatient.id);
     const pe = selectedPatient.email;
+    const isOnPlan = selectedPatient.plan_status === "active";
+    const cleaningsUsed = db_getCleaningsThisYear(selectedPatient.id);
+    const cleaningsLeft = Math.max(0, 2 - cleaningsUsed);
+    const allCleanings = db_getCleanings(selectedPatient.id);
     const statusFlow = ["presented","signed","paid"];
     const statusLabels = { presented:"Presented", signed:"Signed", paid:"Paid" };
     const statusColors = { presented:{ bg:LIGHT_BLUE, text:BLUE }, signed:{ bg:GOLD_BG, text:GOLD }, paid:{ bg:GREEN_BG, text:GREEN } };
+    const [confirmDelete, setConfirmDelete] = useState(false);
     return (
       <div style={{ minHeight:"100vh", background:"#f7f9fb", fontFamily:"'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ background:BLUE, padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -217,13 +239,56 @@ export default function TreatmentPlan() {
           <button onClick={() => { setAppMode("treatment"); setPatientName(`${selectedPatient.first_name} ${selectedPatient.last_name}`); if (pe) setPatientEmail(pe); if (selectedPatient.phone) setPatientPhone(selectedPatient.phone); setSelectedPatient(null); }} style={TB}>+ Plan</button>
         </div>
         <div style={{ padding:16, maxWidth:480, margin:"0 auto" }}>
+          {/* Patient Info */}
           <div style={CS}><div style={SL}>Patient Info</div>
-            {[["Phone", selectedPatient.phone], ["Email", pe], ["In-Office Plan", selectedPatient.plan_status === "active" ? "\u2705 Active \u2014 2 cleanings/yr" : "Not enrolled"]].map(([l,v]) => v ? <div key={l} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"6px 0", borderBottom:"1px solid #f0f0f0" }}><span style={{ color:GRAY }}>{l}</span><span style={{ fontWeight:600 }}>{v}</span></div> : null)}
+            {[["Phone", selectedPatient.phone], ["Email", pe]].map(([l,v]) => v ? <div key={l} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"6px 0", borderBottom:"1px solid #f0f0f0" }}><span style={{ color:GRAY }}>{l}</span><span style={{ fontWeight:600 }}>{v}</span></div> : null)}
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"6px 0" }}><span style={{ color:GRAY }}>Added</span><span style={{ fontWeight:600 }}>{fmtDate(selectedPatient.created_at)}</span></div>
           </div>
+
+          {/* In-Office Cleaning Plan — completely separate section */}
+          <div style={{ ...CS, border: isOnPlan ? `2px solid ${GOLD}` : "none" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: isOnPlan ? 14 : 0 }}>
+              <div style={SL}>{"\u2B50"} In-Office Cleaning Plan</div>
+              {isOnPlan
+                ? <button onClick={() => { db_unenrollPlan(selectedPatient.id); setSelectedPatient({...selectedPatient, plan_status:"none"}); setForceRefresh(p=>p+1); }} style={{ fontSize:11, color:RED, background:"none", border:`1px solid ${RED}`, borderRadius:6, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>Remove</button>
+                : <button onClick={() => { db_enrollPlan(selectedPatient.id); setSelectedPatient({...selectedPatient, plan_status:"active", plan_start_date: new Date().toISOString().split("T")[0]}); setForceRefresh(p=>p+1); }} style={{ fontSize:12, color:"white", background:GOLD, border:"none", borderRadius:8, padding:"8px 14px", cursor:"pointer", fontWeight:700 }}>Enroll in Plan</button>
+              }
+            </div>
+            {isOnPlan && (<>
+              <div style={{ display:"flex", gap:10, marginBottom:12 }}>
+                <div style={{ flex:1, background:cleaningsLeft > 0 ? GREEN_BG : "#FFF3F3", borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:24, fontWeight:800, color: cleaningsLeft > 0 ? GREEN : RED }}>{cleaningsLeft}</div>
+                  <div style={{ fontSize:11, color:GRAY, marginTop:2 }}>cleanings left</div>
+                  <div style={{ fontSize:10, color:"#999" }}>{new Date().getFullYear()}</div>
+                </div>
+                <div style={{ flex:1, background:LIGHT_BLUE, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:24, fontWeight:800, color:BLUE }}>{cleaningsUsed}</div>
+                  <div style={{ fontSize:11, color:GRAY, marginTop:2 }}>cleanings used</div>
+                  <div style={{ fontSize:10, color:"#999" }}>of 2 per year</div>
+                </div>
+              </div>
+              <button onClick={() => { db_addCleaning(selectedPatient.id); setForceRefresh(p=>p+1); }} disabled={cleaningsLeft === 0} style={{ width:"100%", padding:12, background: cleaningsLeft > 0 ? GREEN : "#ccc", color:"white", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor: cleaningsLeft > 0 ? "pointer" : "not-allowed", marginBottom: allCleanings.length > 0 ? 12 : 0 }}>
+                {cleaningsLeft > 0 ? "\u2713 Log Cleaning Visit" : "All 2 cleanings used this year"}
+              </button>
+              {allCleanings.length > 0 && (<div>
+                <div style={{ fontSize:11, fontWeight:600, color:GRAY, marginBottom:6 }}>Cleaning History</div>
+                {allCleanings.map(c => <div key={c.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:12, padding:"6px 0", borderBottom:"1px solid #f0f0f0" }}>
+                  <span>{fmtDate(c.date)}</span>
+                  <button onClick={() => { db_removeCleaning(c.id); setForceRefresh(p=>p+1); }} style={{ fontSize:10, color:RED, background:"none", border:"none", cursor:"pointer" }}>{"\u2715"} remove</button>
+                </div>)}
+              </div>)}
+              {selectedPatient.plan_start_date && <div style={{ fontSize:11, color:GRAY, marginTop:8 }}>Member since {fmtDate(selectedPatient.plan_start_date)}</div>}
+            </>)}
+            {!isOnPlan && <div style={{ fontSize:12, color:GRAY, marginTop:8 }}>Not currently enrolled. Enroll to track 2 cleanings per year.</div>}
+          </div>
+
+          {/* Quick Actions */}
           <div style={{ display:"flex", gap:8, marginBottom:14 }}>
             <button onClick={() => { setAppMode("treatment"); setPatientName(`${selectedPatient.first_name} ${selectedPatient.last_name}`); if (pe) setPatientEmail(pe); if (selectedPatient.phone) setPatientPhone(selectedPatient.phone); setSelectedPatient(null); }} style={{ flex:1, padding:"14px 12px", background:BLUE, color:"white", border:"none", borderRadius:12, fontSize:14, fontWeight:700, cursor:"pointer" }}>{"\u{1F4CB}"} Treatment Plan</button>
             <button onClick={() => { setAppMode("warranty"); setWName(`${selectedPatient.first_name} ${selectedPatient.last_name}`); setSelectedPatient(null); }} style={{ flex:1, padding:"14px 12px", background:"white", color:DARK, border:`2px solid ${BLUE}`, borderRadius:12, fontSize:14, fontWeight:700, cursor:"pointer" }}>{"\u{1F6E1}\uFE0F"} Warranty</button>
           </div>
+
+          {/* Treatment History */}
           <div style={CS}><div style={SL}>Treatment History</div>
             {pts.length === 0 && <div style={{ fontSize:13, color:GRAY }}>No records yet.</div>}
             {pts.map(t => { const sc = statusColors[t.status]||statusColors.presented; return <div key={t.id} style={{ background:"#f7f9fb", borderRadius:10, padding:"12px 14px", marginBottom:10 }}>
@@ -233,10 +298,27 @@ export default function TreatmentPlan() {
               <div style={{ display:"flex", gap:6 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
             </div>; })}
           </div>
+
+          {/* Notes */}
           <div style={CS}><div style={SL}>Notes</div>
             {notes.map(n => <div key={n.id} style={{ background:"#f7f9fb", borderRadius:8, padding:"10px 12px", marginBottom:8 }}><div style={{ fontSize:13 }}>{n.note}</div><div style={{ fontSize:11, color:GRAY, marginTop:4 }}>{fmtDate(n.created_at)}</div></div>)}
             <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add a note..." style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e0e0e0", borderRadius:10, fontSize:14, resize:"vertical", minHeight:80, boxSizing:"border-box", marginTop:8 }} />
             <button onClick={() => { if (newNote.trim()) { db_saveNote(selectedPatient.id, newNote.trim()); setNewNote(""); setForceRefresh(p=>p+1); } }} disabled={!newNote.trim()} style={{ width:"100%", padding:14, background:newNote.trim()?BLUE:"#ccc", color:"white", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:newNote.trim()?"pointer":"not-allowed", marginTop:8 }}>Save Note</button>
+          </div>
+
+          {/* Delete Patient */}
+          <div style={{ marginTop:8, marginBottom:24 }}>
+            {!confirmDelete
+              ? <button onClick={() => setConfirmDelete(true)} style={{ width:"100%", padding:14, background:"white", color:RED, border:`1.5px solid ${RED}`, borderRadius:12, fontSize:14, fontWeight:600, cursor:"pointer" }}>Delete Patient</button>
+              : <div style={{ background:"#FFF3F3", border:`1.5px solid ${RED}`, borderRadius:12, padding:16 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:RED, marginBottom:8 }}>Delete {selectedPatient.first_name} {selectedPatient.last_name}?</div>
+                  <div style={{ fontSize:12, color:GRAY, marginBottom:12 }}>This will permanently remove their profile, all treatment records, notes, and cleaning history.</div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button onClick={() => setConfirmDelete(false)} style={{ flex:1, padding:12, background:"#f0f0f0", border:"none", borderRadius:8, fontSize:14, cursor:"pointer" }}>Cancel</button>
+                    <button onClick={() => { db_deletePatient(selectedPatient.id); setSelectedPatient(null); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:12, background:RED, color:"white", border:"none", borderRadius:8, fontSize:14, fontWeight:700, cursor:"pointer" }}>Delete</button>
+                  </div>
+                </div>
+            }
           </div>
         </div>
       </div>
@@ -422,8 +504,8 @@ export default function TreatmentPlan() {
             <div style={{ fontSize:15, fontWeight:700, color:DARK, marginBottom:4 }}>In-Office Plan Members <span style={{ color:BLUE }}>({members.length})</span></div>
             <div style={{ fontSize:12, color:GRAY, marginBottom:12 }}>Members enrolled in the in-office dental plan (2 cleanings/yr)</div>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search members..." style={{ width:"100%", padding:"11px 14px", border:"1.5px solid #e0e0e0", borderRadius:10, fontSize:15, marginBottom:12, boxSizing:"border-box" }} />
-            {members.filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase())).map(p => <div key={p.id} onClick={() => setSelectedPatient(p)} style={{ background:"white", borderRadius:12, padding:"14px 16px", marginBottom:10, boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}><div><div style={{ fontSize:15, fontWeight:700, color:DARK }}>{p.first_name} {p.last_name}</div>{p.phone && <div style={{ fontSize:12, color:GRAY, marginTop:2 }}>{p.phone}</div>}{p.plan_start_date && <div style={{ fontSize:12, color:GRAY }}>Since {fmtDate(p.plan_start_date)}</div>}</div><div style={{ background:GREEN_BG, color:GREEN, fontSize:11, fontWeight:700, padding:"4px 10px", borderRadius:20 }}>Active</div></div>)}
-            {members.length === 0 && <div style={{ textAlign:"center", color:GRAY, padding:20, fontSize:13 }}>No plan members yet. Toggle "In-Office Plan Member" on a treatment plan to enroll.</div>}
+            {members.filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(search.toLowerCase())).map(p => { const cu = db_getCleaningsThisYear(p.id); const cl = Math.max(0, 2 - cu); return <div key={p.id} onClick={() => setSelectedPatient(p)} style={{ background:"white", borderRadius:12, padding:"14px 16px", marginBottom:10, boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}><div><div style={{ fontSize:15, fontWeight:700, color:DARK }}>{p.first_name} {p.last_name}</div>{p.phone && <div style={{ fontSize:12, color:GRAY, marginTop:2 }}>{p.phone}</div>}{p.plan_start_date && <div style={{ fontSize:12, color:GRAY }}>Since {fmtDate(p.plan_start_date)}</div>}</div><div style={{ textAlign:"right" }}><div style={{ background: cl > 0 ? GREEN_BG : "#FFF3F3", color: cl > 0 ? GREEN : RED, fontSize:11, fontWeight:700, padding:"4px 10px", borderRadius:20 }}>{cl}/2 left</div></div></div>; })}
+            {members.length === 0 && <div style={{ textAlign:"center", color:GRAY, padding:20, fontSize:13 }}>No plan members yet. Open a patient profile and tap "Enroll in Plan" to add them.</div>}
           </>)}
         </div>
       </div>
