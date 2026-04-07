@@ -131,8 +131,6 @@ export default function TreatmentPlan() {
   const [sigStep, setSigStep] = useState("patient");
   const [pushWarranty, setPushWarranty] = useState(true);
   const [emailSent, setEmailSent] = useState(false);
-  const [showReceipt, setShowReceipt] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("debit");
   // Warranty
   const [wName, setWName] = useState(""); const [wDate, setWDate] = useState(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}));
   const [wItems, setWItems] = useState([]); const [wCustom, setWCustom] = useState("");
@@ -181,7 +179,7 @@ export default function TreatmentPlan() {
   const wAllTreatments = wItems.map(i => i.teeth.length > 0 ? i.name + " (#" + i.teeth.join(", #") + ")" : i.name).join(", ");
   const wFormComplete = wName && wItems.length > 0;
 
-  const resetForm = () => { setPatientName(""); setPatientEmail(""); setPatientPhone(""); setTreatments([{id:1,teeth:[],name:"",fee:"",priority:"moderate",customRisk:""}]); setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]); setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null); setShowPreview(false); setCollectSignatures(false); setSigStep("patient"); setSavedToProfile(false); setPushWarranty(true); setEmailSent(false); setShowReceipt(false); setPaymentMethod("debit"); setDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
+  const resetForm = () => { setPatientName(""); setPatientEmail(""); setPatientPhone(""); setTreatments([{id:1,teeth:[],name:"",fee:"",priority:"moderate",customRisk:""}]); setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]); setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null); setShowPreview(false); setCollectSignatures(false); setSigStep("patient"); setSavedToProfile(false); setPushWarranty(true); setEmailSent(false); setDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
   const resetWarranty = () => { setWName(""); setWItems([]); setWCustom(""); setWChoice("agree"); setWSig(null); setWPreview(false); setWCollectSig(false); setWDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
   const resetReceipt = () => { setRcptName(""); setRcptEmail(""); setRcptPhone(""); setRcptItems([{id:1,desc:"",amount:""}]); setRcptPayMethod("debit"); setRcptDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); setRcptDiscount(""); setRcptInsurance(""); setRcptShowPreview(false); setRcptNote(""); setRcptCCSurcharge(false); };
 
@@ -193,7 +191,7 @@ export default function TreatmentPlan() {
     if (patientEmail) patient.email = patientEmail;
     if (patientPhone) patient.phone = patientPhone;
     db_savePatient(patient);
-    db_saveTreatment({ patient_id: patient.id, type: recordType, cost: details.total || 0, status: "presented", summary: details.summary });
+    db_saveTreatment({ patient_id: patient.id, type: recordType, cost: details.total || 0, status: "presented", summary: details.summary, items: details.items || [] });
     setSavedToProfile(true);
   };
 
@@ -297,7 +295,20 @@ export default function TreatmentPlan() {
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}><div style={{ fontSize:14, fontWeight:700, color:DARK }}>{t.type}</div>{t.cost > 0 && <div style={{ fontSize:13, fontWeight:700, color:BLUE }}>${parseFloat(t.cost).toFixed(2)}</div>}</div>
               {t.summary && <div style={{ fontSize:12, color:GRAY, marginBottom:8, lineHeight:1.4 }}>{t.summary}</div>}
               <div style={{ fontSize:11, color:GRAY, marginBottom:8 }}>{fmtDate(t.created_at)}</div>
-              <div style={{ display:"flex", gap:6 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
+              <div style={{ display:"flex", gap:6, marginBottom:8 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
+              {/* Send Receipt button */}
+              <button onClick={() => {
+                setRcptName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
+                if (pe) setRcptEmail(pe);
+                if (selectedPatient.phone) setRcptPhone(selectedPatient.phone);
+                if (t.items && t.items.length > 0) {
+                  setRcptItems(t.items.map((item, idx) => ({ id: idx + 1, desc: item.desc, amount: item.amount })));
+                } else if (t.summary) {
+                  setRcptItems([{ id: 1, desc: t.type + (t.summary ? " - " + t.summary.split("|")[0].trim() : ""), amount: String(t.cost || 0) }]);
+                }
+                setSelectedPatient(null);
+                setAppMode("receipt");
+              }} style={{ width:"100%", padding:"8px 12px", background:"white", color:GREEN, border:`1.5px solid ${GREEN}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>{"\u{1F9FE}"} Send Receipt</button>
             </div>; })}
           </div>
 
@@ -621,59 +632,6 @@ export default function TreatmentPlan() {
   }
 
   // ===========================
-  // TREATMENT RECEIPT (from TP preview)
-  // ===========================
-  if (showReceipt) {
-    const rn = `BFD-${Date.now().toString().slice(-8)}`;
-    return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
-      <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
-      <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:GREEN, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
-        <button onClick={() => setShowReceipt(false)} style={TB}>{"\u2190"} Back</button>
-        <div style={{ display:"flex", gap:6 }}>
-          <button onClick={() => openGmail(patientEmail, `Payment Receipt #${rn} - Buchwald Family Dentistry`, `Dear ${patientName},\n\nReceipt #${rn}\nDate: ${date}\n\n${treatments.filter(t=>t.name).map(t=>`- ${t.name}: $${(parseFloat(t.fee)||0).toFixed(2)}`).join("\n")}${activeDiscount?`\n\n${discountLabel}: -$${discountAmount.toFixed(2)}`:""}${insuranceNum>0?`\nInsurance: -$${insuranceNum.toFixed(2)}`:""}\n\nTotal Paid: $${totalDebit.toFixed(2)}\nPaid via: ${paymentMethod}\n\nThank you!\nBuchwald Family Dentistry & Orthodontics\nbuchwaldfamilydentistry.com`)} style={TB}>{"\u2709\uFE0F"} Email</button>
-          <button onClick={() => savePDF("tp-rcpt", `Receipt_${patientName||"Patient"}.pdf`)} style={TB}>{"\u2B07\uFE0F"} PDF</button>
-          <button onClick={() => window.print()} style={{ background:"white", color:GREEN, border:"none", borderRadius:8, padding:"8px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Print</button>
-        </div>
-      </div>
-      <div id="tp-rcpt"><div className="print-page">
-        <div style={{ textAlign:"center", marginBottom:8 }}><Logo width={180} /></div>
-        <div style={{ textAlign:"center", fontSize:10, color:GRAY, marginBottom:4 }}>300 N. Coit Rd, Ste 245, Richardson, TX 75080 | buchwaldfamilydentistry.com</div>
-        <div style={{ borderBottom:`3px solid ${BLUE}`, marginBottom:16 }} />
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
-          <div><div style={{ fontSize:24, fontWeight:800, color:BLUE }}>RECEIPT</div><div style={{ fontSize:11, color:GRAY, marginTop:4 }}>#{rn}</div></div>
-          <div style={{ textAlign:"right" }}><div style={{ fontSize:12, color:GRAY }}>Date</div><div style={{ fontSize:14, fontWeight:700 }}>{date}</div><div style={{ fontSize:12, color:GRAY, marginTop:8 }}>Payment</div><div style={{ fontSize:14, fontWeight:600, textTransform:"capitalize" }}>{paymentMethod}</div></div>
-        </div>
-        <div style={{ background:"#f7f9fb", borderRadius:8, padding:"14px 18px", marginBottom:20, borderLeft:`4px solid ${BLUE}` }}>
-          <div style={{ fontSize:10, fontWeight:700, color:GRAY, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Bill To</div>
-          <div style={{ fontSize:16, fontWeight:700, color:DARK }}>{patientName}</div>
-          {patientEmail && <div style={{ fontSize:12, color:GRAY, marginTop:2 }}>{patientEmail}</div>}
-        </div>
-        <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:20 }}>
-          <thead><tr><th style={{ background:BLUE, color:"white", padding:"8px 12px", textAlign:"left", fontSize:11, fontWeight:700, borderRadius:"6px 0 0 0" }}>Treatment</th><th style={{ background:BLUE, color:"white", padding:"8px 12px", textAlign:"right", fontSize:11, fontWeight:700, borderRadius:"0 6px 0 0" }}>Amount</th></tr></thead>
-          <tbody>{treatments.filter(t=>t.name).map((t,i) => <tr key={i} style={{ background:i%2===0?"white":"#f9fbfc" }}><td style={{ padding:"10px 12px", borderBottom:"1px solid #eee", fontSize:12 }}>{t.name}{t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""}</td><td style={{ padding:"10px 12px", borderBottom:"1px solid #eee", textAlign:"right", fontSize:12, fontWeight:600 }}>${(parseFloat(t.fee)||0).toFixed(2)}</td></tr>)}</tbody>
-        </table>
-        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:24 }}><div style={{ width:240 }}>
-          {activeDiscount&&<div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:12, color:GREEN }}><span>{discountLabel}</span><span style={{ fontWeight:600 }}>-${discountAmount.toFixed(2)}</span></div>}
-          {insuranceNum>0&&<div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:12, color:GRAY }}><span>Insurance</span><span style={{ fontWeight:600 }}>-${insuranceNum.toFixed(2)}</span></div>}
-          <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0 6px", fontSize:16, fontWeight:800, color:DARK, borderTop:`2px solid ${DARK}`, marginTop:4 }}><span>Total Paid</span><span>${totalDebit.toFixed(2)}</span></div>
-        </div></div>
-        <div style={{ background:`linear-gradient(135deg, ${GREEN} 0%, #1a7a3a 100%)`, borderRadius:12, padding:"20px 24px", textAlign:"center", marginBottom:20 }}><div style={{ fontSize:20, fontWeight:800, color:"white", letterSpacing:2 }}>{"\u2713"} PAID IN FULL</div></div>
-        <div style={{ background:"#f7f9fb", borderRadius:8, padding:"12px 16px", marginBottom:16, fontSize:9.5, color:GRAY, lineHeight:1.6 }}>
-          <div style={{ fontWeight:700, color:DARK, fontSize:10, marginBottom:4 }}>Provider Information</div>
-          <div>Dr. Max Buchwald Jr, DDS</div>
-          <div>Buchwald Family Dentistry & Orthodontics</div>
-          <div>300 N. Coit Rd, Ste 245, Richardson, TX 75080</div>
-          <div>(972) 644-3280 | buchwaldfamilydentistry.com</div>
-        </div>
-        <div style={{ fontSize:9, color:"#999", lineHeight:1.5, textAlign:"center" }}>
-          <div>This receipt may be used for insurance reimbursement or tax deduction purposes.</div>
-          <div>Please retain for your records. Thank you for choosing Buchwald Family Dentistry!</div>
-        </div>
-      </div></div>
-    </div>);
-  }
-
-  // ===========================
   // TREATMENT PLAN FORM
   // ===========================
   if (appMode === "treatment" && !showPreview) {
@@ -726,8 +684,8 @@ export default function TreatmentPlan() {
             <div><div style={{ fontSize:14, fontWeight:700, color:pushWarranty?GOLD:DARK }}>{"\u{1F6E1}\uFE0F"} Push Lifetime Warranty</div><div style={{ fontSize:11, color:pushWarranty?GOLD:GRAY, marginTop:2 }}>{pushWarranty?"Included in plan & email":"Hidden"}</div></div>
           </div>
         </div>
-        <button onClick={() => { saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", ") }); }} disabled={!patientName.trim()} style={{ width:"100%", padding:14, background:savedToProfile?GREEN_BG:"white", color:savedToProfile?GREEN:patientName.trim()?BLUE:GRAY, border:`2px solid ${savedToProfile?GREEN:patientName.trim()?BLUE:"#ddd"}`, borderRadius:12, fontSize:15, fontWeight:700, cursor:patientName.trim()?"pointer":"not-allowed", marginBottom:10 }}>{savedToProfile?"\u2713 Saved to Profile":"\u{1F4BE} Save to Profile"}</button>
-        <button onClick={() => { if (!savedToProfile) saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", ") }); setShowPreview(true); }} disabled={!formComplete} style={{ width:"100%", padding:16, background:formComplete?BLUE:"#ccc", color:"white", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:formComplete?"pointer":"not-allowed", marginBottom:24 }}>Generate Treatment Plan</button>
+        <button onClick={() => { saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", "), items: treatments.filter(t=>t.name).map(t=>({desc:t.name+(t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""), amount:(parseFloat(t.fee)||0).toFixed(2)})) }); }} disabled={!patientName.trim()} style={{ width:"100%", padding:14, background:savedToProfile?GREEN_BG:"white", color:savedToProfile?GREEN:patientName.trim()?BLUE:GRAY, border:`2px solid ${savedToProfile?GREEN:patientName.trim()?BLUE:"#ddd"}`, borderRadius:12, fontSize:15, fontWeight:700, cursor:patientName.trim()?"pointer":"not-allowed", marginBottom:10 }}>{savedToProfile?"\u2713 Saved to Profile":"\u{1F4BE} Save to Profile"}</button>
+        <button onClick={() => { if (!savedToProfile) saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", "), items: treatments.filter(t=>t.name).map(t=>({desc:t.name+(t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""), amount:(parseFloat(t.fee)||0).toFixed(2)})) }); setShowPreview(true); }} disabled={!formComplete} style={{ width:"100%", padding:16, background:formComplete?BLUE:"#ccc", color:"white", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:formComplete?"pointer":"not-allowed", marginBottom:24 }}>Generate Treatment Plan</button>
       </div>
     </div>);
   }
@@ -742,7 +700,6 @@ export default function TreatmentPlan() {
       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
         <button onClick={() => { setShowPreview(false); setCollectSignatures(true); setSigStep("patient"); }} style={TB}>{"\u270D\uFE0F"} Sign</button>
         <button onClick={() => { openGmail(patientEmail, "Your Treatment Plan - Buchwald Family Dentistry", buildTPEmail()); setEmailSent(true); }} style={{ ...TB, background:emailSent?"rgba(45,138,78,0.5)":"rgba(255,255,255,0.2)" }}>{emailSent?"\u2713 Sent":"\u2709\uFE0F Email"}</button>
-        <button onClick={() => setShowReceipt(true)} style={TB}>{"\u{1F9FE}"} Receipt</button>
         <button onClick={resetForm} style={TB}>New</button>
         <button onClick={() => savePDF("tp-pdf", `TreatmentPlan_${patientName||"Patient"}.pdf`)} style={TB}>{"\u2B07\uFE0F"} PDF</button>
         <button onClick={() => window.print()} style={{ background:"white", color:BLUE, border:"none", borderRadius:8, padding:"8px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Print</button>
@@ -758,7 +715,7 @@ export default function TreatmentPlan() {
         {treatments.filter(t=>t.name).map((t,i) => { const p = PRIORITY_LEVELS.find(x=>x.value===t.priority); return <tr key={i}><td style={{ padding:"3px 8px", borderBottom:"1px solid #eee" }}><span style={{ background:p?.bg, color:p?.color, padding:"1px 6px", borderRadius:4, fontSize:9, fontWeight:700 }}>{p?.icon} {p?.label}</span></td><td style={{ padding:"3px 8px", borderBottom:"1px solid #eee" }}>{t.teeth.length>0?"#"+t.teeth.join(", #"):"-"}</td><td style={{ padding:"3px 8px", borderBottom:"1px solid #eee" }}>{t.name}</td><td style={{ padding:"3px 8px", borderBottom:"1px solid #eee", textAlign:"right" }}>${(parseFloat(t.fee)||0).toFixed(2)}</td></tr>; })}
         <tr><td colSpan="3" style={{ padding:"4px 8px", fontWeight:700 }}>Total</td><td style={{ padding:"4px 8px", fontWeight:700, textAlign:"right" }}>${totalDebit.toFixed(2)}</td></tr>
       </tbody></table>
-      {treatments.filter(t=>t.name).some(t=>t.priority==="urgent"||t.priority==="high") && <div style={{ background:"#FFF3F3", border:`1.5px solid ${RED}`, borderRadius:4, padding:"6px 10px", marginBottom:8, fontSize:10, lineHeight:1.5 }}><div style={{ fontWeight:700, color:RED, fontSize:11, marginBottom:4 }}>{"\u26A0\uFE0F"} Risks of Delaying Treatment</div>{treatments.filter(t=>t.name&&(t.priority==="urgent"||t.priority==="high")).map((t,i) => <div key={i} style={{ marginBottom:4 }}><b>{t.name}:</b> {t.customRisk||getRisk(t.name)}</div>)}</div>}
+      {treatments.filter(t=>t.name).length > 0 && <div style={{ background:"#FFF3F3", border:`1.5px solid ${RED}`, borderRadius:4, padding:"6px 10px", marginBottom:8, fontSize:10, lineHeight:1.5 }}><div style={{ fontWeight:700, color:RED, fontSize:11, marginBottom:4 }}>{"\u26A0\uFE0F"} Risks of Delaying Treatment</div>{treatments.filter(t=>t.name).map((t,i) => { const p = PRIORITY_LEVELS.find(x=>x.value===t.priority); return <div key={i} style={{ marginBottom:4 }}><span style={{ background:p?.bg, color:p?.color, padding:"1px 5px", borderRadius:3, fontSize:8, fontWeight:700, marginRight:4 }}>{p?.icon} {p?.label}</span><b>{t.name}:</b> {t.customRisk||getRisk(t.name)}</div>; })}</div>}
       <div style={{ background:LIGHT_BLUE, border:`1px solid ${BLUE}`, borderRadius:4, padding:"6px 10px", marginBottom:8, fontSize:9.5, fontStyle:"italic", color:GRAY, lineHeight:1.4 }}>* Fees may include upgraded services: {selectedUpgrades.length>0?<>{selectedUpgrades.map((s,i) => <span key={s}><b style={{ color:DARK }}>{s}</b>{i<selectedUpgrades.length-1?", ":""}</span>)}{UPGRADED_SERVICES.filter(s=>!selectedUpgrades.includes(s)).length>0&&", "}{UPGRADED_SERVICES.filter(s=>!selectedUpgrades.includes(s)).join(", ")}</>:UPGRADED_SERVICES.join(", ")}</div>
       {activeDiscount&&<div style={{ background:GREEN_BG, border:`1px solid ${GREEN}`, borderRadius:4, padding:"4px 10px", marginBottom:6, fontSize:10.5, textAlign:"center" }}><b style={{ color:GREEN }}>{discountLabel}</b><span style={{ color:DARK, marginLeft:8 }}>You save ${discountAmount.toFixed(2)}</span></div>}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}><div><div style={{ fontSize:13, fontWeight:700 }}>Patient Pays: <span style={{ fontSize:15 }}>${creditPrice.toFixed(2)}</span></div>{insuranceNum>0&&<div style={{ fontSize:10, color:GREEN, marginTop:2 }}>Insurance: ${insuranceNum.toFixed(2)}</div>}</div><div style={{ background:LIGHT_BLUE, border:`1.5px solid ${BLUE}`, padding:"5px 12px", borderRadius:4, textAlign:"center" }}><div style={{ fontSize:9, color:BLUE }}>Debit/Cash/Check</div><div style={{ fontSize:14, fontWeight:800, color:BLUE }}>${totalDebit.toFixed(2)}</div><div style={{ fontSize:8, color:BLUE, marginTop:1 }}>Save ${savings.toFixed(2)}</div></div></div>
