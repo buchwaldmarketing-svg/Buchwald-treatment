@@ -136,6 +136,7 @@ export default function TreatmentPlan() {
   }, []);
 
   const [patientName, setPatientName] = useState("");
+  const [patientEmail, setPatientEmail] = useState("");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   const [treatments, setTreatments] = useState([{ id: 1, teeth: [], name: "", fee: "" }]);
   const [insuranceCoverage, setInsuranceCoverage] = useState("");
@@ -208,7 +209,7 @@ export default function TreatmentPlan() {
   const warrantyFormComplete = warrantyPatientName && warrantyItems.length > 0;
 
   const resetForm = () => {
-    setPatientName(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
+    setPatientName(""); setPatientEmail(""); setTreatments([{ id: 1, teeth: [], name: "", fee: "" }]);
     setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]);
     setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null);
     setShowPreview(false); setCollectSignatures(false); setSigStep("patient");
@@ -231,10 +232,11 @@ export default function TreatmentPlan() {
   const [recordSearch, setRecordSearch] = useState("");
   const [recentActivity, setRecentActivity] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [newMember, setNewMember] = useState({ first_name: "", last_name: "", phone: "", dob: "", notes: "" });
+  const [newMember, setNewMember] = useState({ first_name: "", last_name: "", phone: "", plan_start_date: "" });
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [patientNotes, setPatientNotes] = useState([]);
+  const [patientTreatments, setPatientTreatments] = useState([]);
   const [newNote, setNewNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
 
@@ -277,6 +279,20 @@ export default function TreatmentPlan() {
     setPatientNotes(Array.isArray(data) ? data : []);
   };
 
+  const loadPatientTreatments = async (patientId) => {
+    const res = await supaFetch(`pending_treatments?user_id=eq.${patientId}&order=created_at.desc`);
+    const data = await res.json();
+    setPatientTreatments(Array.isArray(data) ? data : []);
+  };
+
+  const updateTreatmentStatus = async (treatmentId, newStatus) => {
+    await supaFetch(`pending_treatments?id=eq.${treatmentId}`, {
+      method: "PATCH", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    setPatientTreatments(prev => prev.map(t => t.id === treatmentId ? { ...t, status: newStatus } : t));
+  };
+
   const saveNote = async () => {
     if (!newNote.trim() || !selectedPatient) return;
     setSavingNote(true);
@@ -292,28 +308,66 @@ export default function TreatmentPlan() {
   const addMember = async () => {
     if (!newMember.first_name || !newMember.last_name) return;
     setAddMemberLoading(true);
-    const payload = {
-      id: crypto.randomUUID(),
-      email: `${newMember.first_name.toLowerCase()}.${newMember.last_name.toLowerCase()}.${Date.now()}@buchwald.internal`,
-      first_name: newMember.first_name,
-      last_name: newMember.last_name,
-      phone: newMember.phone || "",
-      dob: newMember.dob || null,
-      role: "user",
-      plan_status: "active",
-      plan_start_date: new Date().toISOString().split("T")[0],
-      plan_end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    };
-    await supaFetch("profiles", { method: "POST", body: JSON.stringify(payload) });
-    if (newMember.notes.trim()) {
-      await supaFetch("patient_notes", { method: "POST", body: JSON.stringify({ patient_id: payload.id, admin_id: payload.id, note: newMember.notes.trim(), flag_color: "none" }) });
+    // Check for existing profile first
+    const searchRes = await supaFetch(`profiles?first_name=eq.${encodeURIComponent(newMember.first_name)}&last_name=eq.${encodeURIComponent(newMember.last_name)}&limit=1`);
+    const existing = await searchRes.json();
+    const startDate = newMember.plan_start_date || new Date().toISOString().split("T")[0];
+    const endDate = new Date(new Date(startDate).getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    if (Array.isArray(existing) && existing.length > 0) {
+      await supaFetch(`profiles?id=eq.${existing[0].id}`, { method: "PATCH", headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ plan_status: "active", plan_start_date: startDate, plan_end_date: endDate, ...(newMember.phone ? { phone: newMember.phone } : {}) }) });
+    } else {
+      await supaFetch("profiles", { method: "POST", body: JSON.stringify({
+        id: crypto.randomUUID(),
+        email: `${newMember.first_name.toLowerCase()}.${newMember.last_name.toLowerCase()}.${Date.now()}@buchwald.internal`,
+        first_name: newMember.first_name, last_name: newMember.last_name,
+        phone: newMember.phone || "", role: "user",
+        plan_status: "active", plan_start_date: startDate, plan_end_date: endDate,
+      })});
     }
-    setNewMember({ first_name: "", last_name: "", phone: "", dob: "", notes: "" });
+    setNewMember({ first_name: "", last_name: "", phone: "", plan_start_date: "" });
     setShowAddMember(false);
     setAddMemberLoading(false);
-    // refresh
     setAppMode("__refresh__");
     setTimeout(() => setAppMode(null), 50);
+  };
+
+  // Find or create profile by name (no duplicates), save treatment record with status "shown"
+  const savePatientRecord = async (firstName, lastName, recordType, details) => {
+    try {
+      const searchRes = await supaFetch(`profiles?first_name=eq.${encodeURIComponent(firstName)}&last_name=eq.${encodeURIComponent(lastName)}&limit=1`);
+      const existing = await searchRes.json();
+      let profileId;
+      if (Array.isArray(existing) && existing.length > 0) {
+        profileId = existing[0].id;
+        const updates = {};
+        if (details.inOfficePlan) {
+          const sd = new Date().toISOString().split("T")[0];
+          updates.plan_status = "active";
+          updates.plan_start_date = sd;
+          updates.plan_end_date = new Date(Date.now() + 365*24*60*60*1000).toISOString().split("T")[0];
+        }
+        if (details.email) updates.email = details.email;
+        if (Object.keys(updates).length > 0) {
+          await supaFetch(`profiles?id=eq.${profileId}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(updates) });
+        }
+      } else {
+        profileId = crypto.randomUUID();
+        const sd = new Date().toISOString().split("T")[0];
+        await supaFetch("profiles", { method: "POST", body: JSON.stringify({
+          id: profileId,
+          email: details.email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${Date.now()}@buchwald.internal`,
+          first_name: firstName, last_name: lastName, role: "user",
+          plan_status: details.inOfficePlan ? "active" : "none",
+          ...(details.inOfficePlan ? { plan_start_date: sd, plan_end_date: new Date(Date.now()+365*24*60*60*1000).toISOString().split("T")[0] } : {}),
+        })});
+      }
+      await supaFetch("pending_treatments", { method: "POST", body: JSON.stringify({
+        user_id: profileId, treatment_name: recordType,
+        cost: details.total || 0, status: "shown", notes: details.summary,
+      })});
+      return true;
+    } catch (e) { return false; }
   };
 
   const fmtDate = (d) => { if (!d) return ""; try { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return ""; } };
@@ -333,21 +387,64 @@ export default function TreatmentPlan() {
     );
 
     if (selectedPatient) {
+      const statusFlow = ["shown", "signed", "paid"];
+      const statusColors = { shown: { bg: "#E8F4FA", text: "#0098D4" }, signed: { bg: "#FFF7E0", text: "#B8860B" }, paid: { bg: "#e6f9ee", text: "#2d8a4e" } };
+      const statusLabels = { shown: "Shown", signed: "Signed", paid: "Paid" };
+      const patientEmail = selectedPatient.email && !selectedPatient.email.includes("@buchwald.internal") ? selectedPatient.email : null;
+
       return (
         <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-          <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={() => { setSelectedPatient(null); setPatientNotes([]); }} style={toolbarBtn}>← Back</button>
+          <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <button onClick={() => { setSelectedPatient(null); setPatientNotes([]); setPatientTreatments([]); }} style={toolbarBtn}>← Back</button>
             <div style={{ color: "white", fontSize: 16, fontWeight: 700 }}>{selectedPatient.first_name} {selectedPatient.last_name}</div>
+            {patientEmail
+              ? <a href={`mailto:${patientEmail}`} style={{ background: "rgba(255,255,255,0.2)", color: "white", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "none" }}>✉️ Email</a>
+              : <div style={{ width: 80 }} />}
           </div>
           <div style={{ padding: "16px", maxWidth: 480, margin: "0 auto" }}>
+            {/* Info */}
             <div style={{ background: "white", borderRadius: 12, padding: 20, marginBottom: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Patient Info</div>
-              {[["Phone", selectedPatient.phone], ["Date of birth", fmtDate(selectedPatient.dob)], ["Plan status", selectedPatient.plan_status], ["Member since", fmtDate(selectedPatient.plan_start_date)], ["Renewal", fmtDate(selectedPatient.plan_end_date)]].map(([label, val]) => val ? (
+              {[["Phone", selectedPatient.phone], ["Email", patientEmail], ["Plan status", selectedPatient.plan_status === "active" ? "In-office plan member" : null], ["Member since", fmtDate(selectedPatient.plan_start_date)]].map(([label, val]) => val ? (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
                   <span style={{ color: GRAY }}>{label}</span><span style={{ fontWeight: 600 }}>{val}</span>
                 </div>
               ) : null)}
             </div>
+
+            {/* Treatments */}
+            <div style={{ background: "white", borderRadius: 12, padding: 20, marginBottom: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Treatment Records</div>
+              {patientTreatments.length === 0 && <div style={{ fontSize: 13, color: GRAY }}>No records yet.</div>}
+              {patientTreatments.map(t => {
+                const sc = statusColors[t.status] || statusColors.shown;
+                return (
+                  <div key={t.id} style={{ background: "#f7f9fb", borderRadius: 10, padding: "12px 14px", marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: DARK }}>{t.treatment_name}</div>
+                      {t.cost > 0 && <div style={{ fontSize: 13, fontWeight: 700, color: BLUE }}>${parseFloat(t.cost).toFixed(2)}</div>}
+                    </div>
+                    {t.notes && <div style={{ fontSize: 12, color: GRAY, marginBottom: 8, lineHeight: 1.4 }}>{t.notes}</div>}
+                    <div style={{ fontSize: 11, color: GRAY, marginBottom: 8 }}>{fmtDate(t.created_at)}</div>
+                    {/* Status stepper */}
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {statusFlow.map(s => {
+                        const active = t.status === s;
+                        const done = statusFlow.indexOf(t.status) > statusFlow.indexOf(s);
+                        return (
+                          <button key={s} onClick={() => updateTreatmentStatus(t.id, s)}
+                            style={{ flex: 1, padding: "6px 4px", borderRadius: 8, border: `1.5px solid ${active || done ? sc.text : "#ddd"}`, background: active ? sc.bg : done ? "#f0f0f0" : "white", color: active ? sc.text : done ? GRAY : GRAY, fontSize: 12, fontWeight: active ? 700 : 400, cursor: "pointer" }}>
+                            {done ? "✓ " : ""}{statusLabels[s]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Notes */}
             <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Notes</div>
               {patientNotes.length === 0 && <div style={{ fontSize: 13, color: GRAY, marginBottom: 12 }}>No notes yet.</div>}
@@ -462,17 +559,22 @@ export default function TreatmentPlan() {
               {showAddMember && (
                 <div style={{ background: "white", borderRadius: 12, padding: 20, marginBottom: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 14 }}>New Plan Member</div>
-                  {[["First name *", "first_name", "text"], ["Last name *", "last_name", "text"], ["Phone", "phone", "tel"], ["Date of birth", "dob", "date"]].map(([label, field, type]) => (
+                  {[["First name *", "first_name", "text"], ["Last name *", "last_name", "text"]].map(([label, field, type]) => (
                     <div key={field} style={{ marginBottom: 10 }}>
                       <label style={{ fontSize: 12, color: GRAY, display: "block", marginBottom: 4 }}>{label}</label>
                       <input type={type} value={newMember[field]} onChange={e => setNewMember(p => ({ ...p, [field]: e.target.value }))}
                         style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
                     </div>
                   ))}
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 12, color: GRAY, display: "block", marginBottom: 4 }}>Plan start date *</label>
+                    <input type="date" value={newMember.plan_start_date} onChange={e => setNewMember(p => ({ ...p, plan_start_date: e.target.value }))}
+                      style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
+                  </div>
                   <div style={{ marginBottom: 12 }}>
-                    <label style={{ fontSize: 12, color: GRAY, display: "block", marginBottom: 4 }}>Notes (optional)</label>
-                    <textarea value={newMember.notes} onChange={e => setNewMember(p => ({ ...p, notes: e.target.value }))}
-                      style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 14, resize: "vertical", minHeight: 60, boxSizing: "border-box" }} />
+                    <label style={{ fontSize: 12, color: GRAY, display: "block", marginBottom: 4 }}>Phone (optional)</label>
+                    <input type="tel" value={newMember.phone} onChange={e => setNewMember(p => ({ ...p, phone: e.target.value }))}
+                      style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={() => setShowAddMember(false)} style={{ flex: 1, padding: 12, background: "#f0f0f0", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Cancel</button>
@@ -489,12 +591,12 @@ export default function TreatmentPlan() {
               {hubLoading && <div style={{ textAlign: "center", color: GRAY, padding: 20 }}>Loading...</div>}
               {!hubLoading && filteredMembers.length === 0 && <div style={{ textAlign: "center", color: GRAY, padding: 20, fontSize: 13 }}>No members found</div>}
               {filteredMembers.map(m => (
-                <div key={m.id} onClick={() => { setSelectedPatient(m); loadPatientNotes(m.id); }}
+                <div key={m.id} onClick={() => { setSelectedPatient(m); loadPatientNotes(m.id); loadPatientTreatments(m.id); }}
                   style={{ background: "white", borderRadius: 12, padding: "14px 16px", marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.07)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: DARK }}>{m.first_name} {m.last_name}</div>
                     {m.phone && <div style={{ fontSize: 12, color: GRAY, marginTop: 2 }}>{m.phone}</div>}
-                    {m.plan_end_date && <div style={{ fontSize: 12, color: GRAY }}>Renews {fmtDate(m.plan_end_date)}</div>}
+                    {m.plan_start_date && <div style={{ fontSize: 12, color: GRAY }}>Member since {fmtDate(m.plan_start_date)}</div>}
                   </div>
                   <div style={{ background: "#e6f9ee", color: "#2d8a4e", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 }}>Active</div>
                 </div>
@@ -510,7 +612,7 @@ export default function TreatmentPlan() {
               {hubLoading && <div style={{ textAlign: "center", color: GRAY, padding: 20 }}>Loading...</div>}
               {!hubLoading && filteredRecords.length === 0 && <div style={{ textAlign: "center", color: GRAY, padding: 20, fontSize: 13 }}>No records found</div>}
               {filteredRecords.map(r => (
-                <div key={r.id} onClick={() => { setSelectedPatient(r); loadPatientNotes(r.id); }}
+                <div key={r.id} onClick={() => { setSelectedPatient(r); loadPatientNotes(r.id); loadPatientTreatments(r.id); }}
                   style={{ background: "white", borderRadius: 12, padding: "14px 16px", marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.07)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: DARK }}>{r.first_name} {r.last_name}</div>
@@ -673,11 +775,23 @@ export default function TreatmentPlan() {
             </div>
           </div>
 
-          <button onClick={() => setCollectWarrantySig(true)} disabled={!warrantyFormComplete}
+          <button onClick={() => {
+            setCollectWarrantySig(true);
+            const [firstName, ...rest] = warrantyPatientName.trim().split(" ");
+            const lastName = rest.join(" ") || "-";
+            const summary = `Date: ${warrantyDate} | Treatments: ${allWarrantyTreatments} | Election: ${warrantyChoice === "agree" ? "Agreed" : "Waived"}`;
+            savePatientRecord(firstName, lastName, "Warranty Form", { total: 0, summary });
+          }} disabled={!warrantyFormComplete}
             style={{ width: "100%", padding: 16, background: warrantyFormComplete ? BLUE : "#ccc", color: "white", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: warrantyFormComplete ? "pointer" : "not-allowed", marginBottom: 10 }}>
             Collect Signature
           </button>
-          <button onClick={() => setShowWarrantyPreview(true)} disabled={!warrantyFormComplete}
+          <button onClick={() => {
+            setShowWarrantyPreview(true);
+            const [firstName, ...rest] = warrantyPatientName.trim().split(" ");
+            const lastName = rest.join(" ") || "-";
+            const summary = `Date: ${warrantyDate} | Treatments: ${allWarrantyTreatments} | Election: ${warrantyChoice === "agree" ? "Agreed" : "Waived"}`;
+            savePatientRecord(firstName, lastName, "Warranty Form", { total: 0, summary });
+          }} disabled={!warrantyFormComplete}
             style={{ width: "100%", padding: 16, background: "white", color: warrantyFormComplete ? BLUE : "#ccc", border: `2px solid ${warrantyFormComplete ? BLUE : "#ccc"}`, borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: warrantyFormComplete ? "pointer" : "not-allowed", marginBottom: 10 }}>
             Preview Without Signature
           </button>
@@ -882,6 +996,8 @@ export default function TreatmentPlan() {
             <div style={sectionLabel}>Patient Info</div>
             <label style={labelStyle}>Patient Name</label>
             <input type="text" value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="First Last" style={inputStyle} />
+            <label style={labelStyle}>Email <span style={{ fontWeight: 400, color: "#999" }}>(optional — for records &amp; follow-up)</span></label>
+            <input type="email" value={patientEmail} onChange={(e) => setPatientEmail(e.target.value)} placeholder="patient@email.com" style={inputStyle} />
             <label style={labelStyle}>Date</label>
             <input type="text" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
           </div>
@@ -1025,7 +1141,14 @@ export default function TreatmentPlan() {
             )}
           </div>
 
-          <button onClick={() => setShowPreview(true)} disabled={!formComplete}
+          <button onClick={() => {
+            setShowPreview(true);
+            // Save to Supabase
+            const [firstName, ...rest] = patientName.trim().split(" ");
+            const lastName = rest.join(" ") || "-";
+            const summary = `Date: ${date} | Treatments: ${treatments.filter(t=>t.name).map(t=>`${t.name}${t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", ")} | Total: $${totalDebit.toFixed(2)}${activeDiscount?" | "+discountLabel:""}`;
+            savePatientRecord(firstName, lastName, "Treatment Plan", { total: totalDebit, summary, email: patientEmail, inOfficePlan });
+          }} disabled={!formComplete}
             style={{ width: "100%", padding: 16, background: formComplete ? BLUE : "#ccc", color: "white", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: formComplete ? "pointer" : "not-allowed", marginBottom: 10 }}>
             Generate Treatment Plan
           </button>
@@ -1048,13 +1171,14 @@ export default function TreatmentPlan() {
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={() => { setShowPreview(false); setCollectSignatures(true); setSigStep("patient"); }} style={toolbarBtn}>{"\u270D\uFE0F"} Sign</button>
           <button onClick={() => {
+            const to = patientEmail || "";
             const subject = encodeURIComponent(`Treatment Plan - ${patientName} - Buchwald Family Dentistry`);
             const body = encodeURIComponent(`Treatment Plan Summary\n\nPatient: ${patientName}\nDate: ${date}\n\nTreatments:\n${treatments.filter(t => t.name).map(t => {
               const teethStr = t.teeth.length > 0 ? "Tooth #" + t.teeth.join(", #") + " - " : "";
               return `- ${teethStr}${t.name}: $${(parseFloat(t.fee) || 0).toFixed(2)}`;
             }).join("\n")}\n\nCredit/Card Price: $${creditPrice.toFixed(2)}\nDebit/Cash/Check Price: $${totalDebit.toFixed(2)}${activeDiscount ? `\n${discountLabel}: -$${discountAmount.toFixed(2)}` : ""}${financing > 0 ? `\n${financing} Month Payment Plan: $${monthlyPayment.toFixed(2)}/mo at 0% interest` : ""}${insuranceNum > 0 ? `\nInsurance Coverage: $${insuranceNum.toFixed(2)}` : ""}\n\nPayment Options:\n1. Pay in full at appointment\n2. For crowns: Half at prep, half at seat\n3. 6-month CareCredit at 0%\n4. Cherry financing as low as 0%\n\n---\nBuchwald Family Dentistry & Orthodontics`);
-            window.location.href = `mailto:?subject=${subject}&body=${body}`;
-          }} style={toolbarBtn}>{"\u2709\uFE0F"} Email</button>
+            window.open(`mailto:${to}?subject=${subject}&body=${body}`, "_blank");
+          }} style={toolbarBtn}>✉️ Email</button>
           <button onClick={resetForm} style={toolbarBtn}>New</button>
           <button onClick={() => savePDF("tp-pdf", `TreatmentPlan_${patientName || "Patient"}.pdf`)} style={toolbarBtn}>⬇️ PDF</button>
           <button onClick={() => window.print()} style={{ background: "white", color: BLUE, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Print</button>
