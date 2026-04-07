@@ -17,16 +17,16 @@ const PRIORITY_LEVELS = [
   { value: "low", label: "Low", color: "#2d8a4e", bg: "#e6f9ee", icon: "\u{1F7E2}" },
 ];
 const RISK_MAP = {
-  crown: "Without a crown, the weakened tooth risks fracture \u2014 potentially requiring extraction + implant ($4,000\u2013$6,000) or root canal ($1,500\u2013$2,000).",
+  crown: "Without a crown, the weakened tooth risks fracture - potentially requiring extraction + implant ($4,000-$6,000) or root canal ($1,500-$2,000).",
   "root canal": "Delaying allows infection to spread to bone/tissue, leading to abscess, bone loss, and potential tooth loss requiring an implant.",
-  filling: "Untreated cavities grow toward the nerve, turning a $200\u2013$400 filling into a $1,500+ root canal or crown.",
-  composite: "Untreated cavities grow toward the nerve, turning a $200\u2013$400 filling into a $1,500+ root canal or crown.",
+  filling: "Untreated cavities grow toward the nerve, turning a $200-$400 filling into a $1,500+ root canal or crown.",
+  composite: "Untreated cavities grow toward the nerve, turning a $200-$400 filling into a $1,500+ root canal or crown.",
   implant: "Missing teeth cause adjacent teeth to shift, bone loss in the jaw, and bite problems. Costs multiply over time.",
   bridge: "Without replacing the tooth, surrounding teeth drift and tilt, creating decay-prone areas on healthy teeth.",
   extract: "Untreated damaged/infected teeth can cause spreading infection and damage to neighboring teeth.",
-  scaling: "Untreated gum disease causes progressive, irreversible bone loss \u2014 the #1 cause of tooth loss in adults.",
-  perio: "Untreated gum disease causes progressive, irreversible bone loss \u2014 the #1 cause of tooth loss in adults.",
-  "deep clean": "Untreated gum disease causes progressive, irreversible bone loss \u2014 the #1 cause of tooth loss in adults.",
+  scaling: "Untreated gum disease causes progressive, irreversible bone loss - the #1 cause of tooth loss in adults.",
+  perio: "Untreated gum disease causes progressive, irreversible bone loss - the #1 cause of tooth loss in adults.",
+  "deep clean": "Untreated gum disease causes progressive, irreversible bone loss - the #1 cause of tooth loss in adults.",
   veneer: "Delaying on compromised teeth allows further wear, chipping, or decay of the underlying structure.",
   invisalign: "Misaligned teeth increase cavity/gum disease risk. Bite issues cause TMJ pain, headaches, and uneven wear.",
   ortho: "Misaligned teeth increase cavity/gum disease risk. Bite issues cause TMJ pain, headaches, and uneven wear.",
@@ -331,7 +331,7 @@ export default function TreatmentPlan() {
   if (appMode === "receipt") {
     if (rcptShowPreview) {
       const rcptNum = `BFD-${Date.now().toString().slice(-8)}`;
-      const rcptEmailBody = `Dear ${rcptName},\n\nThank you for your payment at Buchwald Family Dentistry.\n\nReceipt #: ${rcptNum}\nDate: ${rcptDate}\nPayment: ${rcptPayMethod}\n\nServices:\n${rcptItems.filter(i=>i.desc).map(i=>`  ${i.desc}: $${(parseFloat(i.amount)||0).toFixed(2)}`).join("\n")}${rcptDiscNum>0?`\n\nDiscount: -$${rcptDiscNum.toFixed(2)}`:""}${rcptInsNum>0?`\nInsurance Applied: -$${rcptInsNum.toFixed(2)}`:""}\n\nTotal Paid: $${rcptTotal.toFixed(2)}${rcptNote?`\n\nNote: ${rcptNote}`:""}\n\nThank you for choosing Buchwald Family Dentistry!\n\n---\nBuchwald Family Dentistry & Orthodontics\n3417 Spectrum Blvd, Richardson, TX 75082\nbuchwaldfamilydentistry.com`;
+      const rcptEmailBody = `Dear ${rcptName},\n\nThank you for your payment at Buchwald Family Dentistry.\n\nReceipt #: ${rcptNum}\nDate: ${rcptDate}\nPayment: ${rcptPayMethod}\n\nServices:\n${rcptItems.filter(i=>i.desc).map(i=>`  ${i.desc}: $${(parseFloat(i.amount)||0).toFixed(2)}`).join("\n")}${rcptDiscNum>0?`\n\nDiscount: -$${rcptDiscNum.toFixed(2)}`:""}${rcptInsNum>0?`\nInsurance Applied: -$${rcptInsNum.toFixed(2)}`:""}\n\nTotal Paid: $${rcptTotal.toFixed(2)}${rcptNote?`\n\nNote: ${rcptNote}`:""}\n\nThank you for choosing Buchwald Family Dentistry!\n\n---\nBuchwald Family Dentistry & Orthodontics\n300 N. Coit Rd, Ste 245, Richardson, TX 75080\nbuchwaldfamilydentistry.com`;
       return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
         <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
         <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:GREEN, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
@@ -345,7 +345,7 @@ export default function TreatmentPlan() {
         <div id="rcpt-pdf"><div className="print-page">
           {/* NICE RECEIPT */}
           <div style={{ textAlign:"center", marginBottom:8 }}><Logo width={180} /></div>
-          <div style={{ textAlign:"center", fontSize:10, color:GRAY, marginBottom:4 }}>3417 Spectrum Blvd, Richardson, TX 75082 | buchwaldfamilydentistry.com</div>
+          <div style={{ textAlign:"center", fontSize:10, color:GRAY, marginBottom:4 }}>300 N. Coit Rd, Ste 245, Richardson, TX 75080 | buchwaldfamilydentistry.com</div>
           <div style={{ borderBottom:`3px solid ${BLUE}`, marginBottom:16 }} />
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
             <div>
@@ -393,9 +393,16 @@ export default function TreatmentPlan() {
             <div style={{ fontSize:20, fontWeight:800, color:"white", letterSpacing:2 }}>{"\u2713"} PAID IN FULL</div>
           </div>
           {rcptNote && <div style={{ background:"#f7f9fb", borderRadius:8, padding:"12px 16px", marginBottom:20, fontSize:11, color:GRAY, borderLeft:`3px solid ${GOLD}` }}><b style={{ color:DARK }}>Note:</b> {rcptNote}</div>}
-          <div style={{ textAlign:"center", fontSize:10, color:GRAY, lineHeight:1.8, borderTop:"1px solid #eee", paddingTop:16 }}>
-            <div style={{ fontWeight:700, color:DARK }}>Thank you for choosing Buchwald Family Dentistry!</div>
-            <div>Questions? Call us at (469) 804-5002</div>
+          <div style={{ background:"#f7f9fb", borderRadius:8, padding:"12px 16px", marginBottom:16, fontSize:9.5, color:GRAY, lineHeight:1.6 }}>
+            <div style={{ fontWeight:700, color:DARK, fontSize:10, marginBottom:4 }}>Provider Information</div>
+            <div>Dr. Max Buchwald Jr, DDS</div>
+            <div>Buchwald Family Dentistry & Orthodontics</div>
+            <div>300 N. Coit Rd, Ste 245, Richardson, TX 75080</div>
+            <div>(972) 644-3280 | buchwaldfamilydentistry.com</div>
+          </div>
+          <div style={{ fontSize:9, color:"#999", lineHeight:1.5, textAlign:"center", marginBottom:12 }}>
+            <div>This receipt may be used for insurance reimbursement or tax deduction purposes.</div>
+            <div>Please retain for your records. Thank you for choosing Buchwald Family Dentistry!</div>
           </div>
         </div></div>
       </div>);
@@ -422,7 +429,7 @@ export default function TreatmentPlan() {
           <select value={rcptPayMethod} onChange={e => setRcptPayMethod(e.target.value)} style={{ ...IS, appearance:"auto" }}><option value="debit">Debit</option><option value="cash">Cash</option><option value="check">Check</option><option value="credit card">Credit Card</option><option value="CareCredit">CareCredit</option><option value="Cherry">Cherry</option><option value="insurance">Insurance</option></select>
           <label style={LS}>Discount <span style={{ fontWeight:400, color:"#999" }}>(optional)</span></label><div style={{ position:"relative" }}><span style={DS}>$</span><input type="number" inputMode="decimal" value={rcptDiscount} onChange={e => setRcptDiscount(e.target.value)} placeholder="0" style={{ ...IS, paddingLeft:28 }} /></div>
           <label style={LS}>Insurance Applied <span style={{ fontWeight:400, color:"#999" }}>(optional)</span></label><div style={{ position:"relative" }}><span style={DS}>$</span><input type="number" inputMode="decimal" value={rcptInsurance} onChange={e => setRcptInsurance(e.target.value)} placeholder="0" style={{ ...IS, paddingLeft:28 }} /></div>
-          <label style={LS}>Note <span style={{ fontWeight:400, color:"#999" }}>(optional \u2014 prints on receipt)</span></label><input type="text" value={rcptNote} onChange={e => setRcptNote(e.target.value)} placeholder="Next appointment, follow-up..." style={IS} />
+          <label style={LS}>Note <span style={{ fontWeight:400, color:"#999" }}>(optional - prints on receipt)</span></label><input type="text" value={rcptNote} onChange={e => setRcptNote(e.target.value)} placeholder="Next appointment, follow-up..." style={IS} />
           {rcptSubtotal > 0 && <div style={{ marginTop:16, background:"#f7f9fb", borderRadius:10, padding:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, fontWeight:600, color:DARK, marginBottom:4 }}><span>Subtotal</span><span>${rcptSubtotal.toFixed(2)}</span></div>
             {rcptDiscNum > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:GREEN, marginBottom:4 }}><span>Discount</span><span>-${rcptDiscNum.toFixed(2)}</span></div>}
@@ -570,7 +577,7 @@ export default function TreatmentPlan() {
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10, fontSize:11.5 }}><div><b style={{ color:GRAY }}>Patient: </b><span style={{ borderBottom:"1px solid #999", display:"inline-block", minWidth:220 }}>{wName}</span></div><div><b style={{ color:GRAY }}>Date: </b><span style={{ borderBottom:"1px solid #999", display:"inline-block", minWidth:120 }}>{wDate}</span></div></div>
         <p style={{ fontSize:10.5, lineHeight:1.55, margin:"0 0 8px", color:DARK }}>At Buchwald Family Dentistry, we back our work with a <b style={{ color:BLUE }}>Lifetime Warranty</b>. If a warranted restoration fails under normal use, we will repair or replace it at no additional charge.</p>
         <div style={{ background:LIGHT_BLUE, border:`1.5px solid ${BLUE}`, borderRadius:4, padding:"6px 10px", marginBottom:8, fontSize:10, lineHeight:1.5 }}><div style={{ fontWeight:700, color:BLUE, fontSize:11, marginBottom:2 }}>Treatments Covered</div><p style={{ margin:0 }}>Crowns, Composite Fillings, Implants, Orthodontics (first 2 replacement retainers), PRR, Scaling & Root Planning, Bridges, and Veneers.</p></div>
-        <div style={{ background:"#F9FBF2", border:"1.5px solid #8AAE2B", borderRadius:4, padding:"6px 10px", marginBottom:8, fontSize:10 }}><div style={{ fontWeight:700, color:"#5A7A10", fontSize:11, marginBottom:4 }}>What This Saves You</div><div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}><span>Crown replacement:</span><span style={{ fontWeight:700 }}>$2,500\u2013$3,000</span></div><div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}><span>Implant crown:</span><span style={{ fontWeight:700 }}>$4,000\u2013$6,000</span></div><div style={{ display:"flex", justifyContent:"space-between", borderTop:"1px dashed #8AAE2B", paddingTop:3, marginTop:2 }}><span style={{ fontWeight:700, color:"#5A7A10" }}>With Warranty:</span><span style={{ fontWeight:700, color:"#5A7A10" }}>$0</span></div></div>
+        <div style={{ background:"#F9FBF2", border:"1.5px solid #8AAE2B", borderRadius:4, padding:"6px 10px", marginBottom:8, fontSize:10 }}><div style={{ fontWeight:700, color:"#5A7A10", fontSize:11, marginBottom:4 }}>What This Saves You</div><div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}><span>Crown replacement:</span><span style={{ fontWeight:700 }}>$2,500-$3,000</span></div><div style={{ display:"flex", justifyContent:"space-between", marginBottom:2 }}><span>Implant crown:</span><span style={{ fontWeight:700 }}>$4,000-$6,000</span></div><div style={{ display:"flex", justifyContent:"space-between", borderTop:"1px dashed #8AAE2B", paddingTop:3, marginTop:2 }}><span style={{ fontWeight:700, color:"#5A7A10" }}>With Warranty:</span><span style={{ fontWeight:700, color:"#5A7A10" }}>$0</span></div></div>
         <div style={{ fontSize:12, fontWeight:700, color:BLUE, marginBottom:4 }}>Your Lifetime Care Plan</div>
         <div style={{ paddingLeft:14, fontSize:10, lineHeight:1.65, marginBottom:6 }}><div style={{ marginBottom:2 }}>1. <b>Regular Cleanings</b> every 6-7 months</div><div style={{ marginBottom:2 }}>2. <b>Custom Nightguard</b> (starting at $400)</div><div style={{ marginBottom:2 }}>3. <b>Fluoride Treatment</b> twice/year</div><div style={{ marginBottom:2 }}>4. <b>Laser Bacterial Reduction</b> every 12 months</div><div style={{ marginBottom:2 }}>5. <b>InnerView Scan</b> every 6 months</div></div>
         <p style={{ fontSize:10, fontWeight:700, color:DARK, marginBottom:6, background:GOLD_BG, border:"1px solid #D4A017", borderRadius:3, padding:"4px 8px" }}>If any requirements are not maintained, warranty coverage will be voided.</p>
@@ -621,7 +628,7 @@ export default function TreatmentPlan() {
       </div>
       <div id="tp-rcpt"><div className="print-page">
         <div style={{ textAlign:"center", marginBottom:8 }}><Logo width={180} /></div>
-        <div style={{ textAlign:"center", fontSize:10, color:GRAY, marginBottom:4 }}>3417 Spectrum Blvd, Richardson, TX 75082 | buchwaldfamilydentistry.com</div>
+        <div style={{ textAlign:"center", fontSize:10, color:GRAY, marginBottom:4 }}>300 N. Coit Rd, Ste 245, Richardson, TX 75080 | buchwaldfamilydentistry.com</div>
         <div style={{ borderBottom:`3px solid ${BLUE}`, marginBottom:16 }} />
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
           <div><div style={{ fontSize:24, fontWeight:800, color:BLUE }}>RECEIPT</div><div style={{ fontSize:11, color:GRAY, marginTop:4 }}>#{rn}</div></div>
@@ -642,7 +649,17 @@ export default function TreatmentPlan() {
           <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0 6px", fontSize:16, fontWeight:800, color:DARK, borderTop:`2px solid ${DARK}`, marginTop:4 }}><span>Total Paid</span><span>${totalDebit.toFixed(2)}</span></div>
         </div></div>
         <div style={{ background:`linear-gradient(135deg, ${GREEN} 0%, #1a7a3a 100%)`, borderRadius:12, padding:"20px 24px", textAlign:"center", marginBottom:20 }}><div style={{ fontSize:20, fontWeight:800, color:"white", letterSpacing:2 }}>{"\u2713"} PAID IN FULL</div></div>
-        <div style={{ textAlign:"center", fontSize:10, color:GRAY, lineHeight:1.8, borderTop:"1px solid #eee", paddingTop:16 }}><div style={{ fontWeight:700, color:DARK }}>Thank you for choosing Buchwald Family Dentistry!</div></div>
+        <div style={{ background:"#f7f9fb", borderRadius:8, padding:"12px 16px", marginBottom:16, fontSize:9.5, color:GRAY, lineHeight:1.6 }}>
+          <div style={{ fontWeight:700, color:DARK, fontSize:10, marginBottom:4 }}>Provider Information</div>
+          <div>Dr. Max Buchwald Jr, DDS</div>
+          <div>Buchwald Family Dentistry & Orthodontics</div>
+          <div>300 N. Coit Rd, Ste 245, Richardson, TX 75080</div>
+          <div>(972) 644-3280 | buchwaldfamilydentistry.com</div>
+        </div>
+        <div style={{ fontSize:9, color:"#999", lineHeight:1.5, textAlign:"center" }}>
+          <div>This receipt may be used for insurance reimbursement or tax deduction purposes.</div>
+          <div>Please retain for your records. Thank you for choosing Buchwald Family Dentistry!</div>
+        </div>
       </div></div>
     </div>);
   }
@@ -758,7 +775,7 @@ export default function TreatmentPlan() {
       <p style={{ fontSize:9.5, fontStyle:"italic", color:GRAY, margin:"0 0 6px", lineHeight:1.4 }}>Dental coverage is more like a discount program with a small treatment assistance benefit.</p>
       <div style={{ fontSize:14, fontWeight:700, color:BLUE, marginBottom:4 }}>Why We Prioritize Long-Lasting Work</div>
       <p style={{ fontSize:10.5, lineHeight:1.5, margin:"0 0 3px" }}>Many plans only cover replacement every 5 years. We use materials that last 10-15+ years:</p>
-      <ul style={{ fontSize:10.5, lineHeight:1.6, margin:"0 0 3px", paddingLeft:18 }}><li><b>Higher-quality materials</b></li><li><b>Precise technique</b></li><li><b>Better durability</b> \u2014 fewer replacements</li></ul>
+      <ul style={{ fontSize:10.5, lineHeight:1.6, margin:"0 0 3px", paddingLeft:18 }}><li><b>Higher-quality materials</b></li><li><b>Precise technique</b></li><li><b>Better durability</b> - fewer replacements</li></ul>
       <div style={{ borderBottom:`2px solid ${BLUE}`, marginBottom:6 }} />
       {pushWarranty ? <><div style={{ fontSize:14, fontWeight:700, color:BLUE, marginBottom:4 }}>Our Lifetime Warranty</div>
         <p style={{ fontSize:10.5, lineHeight:1.5, margin:"0 0 5px" }}>We offer a <b style={{ color:BLUE }}>Lifetime Warranty</b> on qualifying restorations. If it fails under normal use, we repair or replace at no charge.</p>
