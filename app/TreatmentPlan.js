@@ -651,7 +651,7 @@ export default function TreatmentPlan() {
               <div style={{ flex:1 }}><label style={{ ...LS, marginTop:0 }}>Treatment</label><input type="text" value={t.name} onChange={e => updateTreatment(t.id,"name",e.target.value)} placeholder="Crown, Invisalign..." style={{ ...IS, padding:"10px 12px" }} /></div>
               <div style={{ flex:"0 0 100px" }}><label style={{ ...LS, marginTop:0 }}>Fee</label><div style={{ position:"relative" }}><span style={{ ...DS, left:10 }}>$</span><input type="number" inputMode="decimal" value={t.fee} onChange={e => updateTreatment(t.id,"fee",e.target.value)} placeholder="0" style={{ ...IS, padding:"10px 12px 10px 24px" }} /></div></div>
             </div>
-            {t.name&&<div style={{marginBottom:10}}><label style={{...LS,marginTop:0,marginBottom:8}}>Tooth #</label>
+            <label style={{ ...LS, marginTop:0, marginBottom:8 }}>Tooth #</label>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(8, 1fr)", gap:6 }}>{Array.from({length:32},(_,i)=>i+1).map(n => { const s=t.teeth.includes(n); return <button key={n} onClick={() => toggleTooth(t.id,n)} style={{ padding:"8px 0", borderRadius:8, border:`1.5px solid ${s?BLUE:"#ddd"}`, background:s?BLUE:"white", color:s?"white":DARK, fontSize:13, fontWeight:s?700:400, cursor:"pointer" }}>{n}</button>; })}</div>
             {t.teeth.length > 0 && <div style={{ marginTop:6, fontSize:12, color:BLUE, fontWeight:600 }}>Selected: #{t.teeth.join(", #")}</div>}
           </div>)}
