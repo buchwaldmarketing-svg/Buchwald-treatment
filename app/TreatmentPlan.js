@@ -147,6 +147,7 @@ export default function TreatmentPlan() {
   const [rcptDiscount, setRcptDiscount] = useState(""); const [rcptInsurance, setRcptInsurance] = useState("");
   const [rcptShowPreview, setRcptShowPreview] = useState(false);
   const [rcptNote, setRcptNote] = useState("");
+  const [rcptCCSurcharge, setRcptCCSurcharge] = useState(false);
   // Hub
   const [hubTab, setHubTab] = useState("home");
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -168,7 +169,8 @@ export default function TreatmentPlan() {
   const rcptSubtotal = rcptItems.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
   const rcptDiscNum = parseFloat(rcptDiscount) || 0;
   const rcptInsNum = parseFloat(rcptInsurance) || 0;
-  const rcptTotal = Math.max(0, rcptSubtotal - rcptDiscNum - rcptInsNum);
+  const rcptCCFee = rcptCCSurcharge ? Math.round(rcptSubtotal * 0.03 * 100) / 100 : 0;
+  const rcptTotal = Math.max(0, rcptSubtotal + rcptCCFee - rcptDiscNum - rcptInsNum);
 
   const toggleUpgrade = svc => setSelectedUpgrades(p => p.includes(svc) ? p.filter(s => s !== svc) : [...p, svc]);
   const addTreatment = () => setTreatments(p => [...p, { id: Date.now(), teeth: [], name: "", fee: "", priority: "moderate", customRisk: "" }]);
@@ -181,7 +183,7 @@ export default function TreatmentPlan() {
 
   const resetForm = () => { setPatientName(""); setPatientEmail(""); setPatientPhone(""); setTreatments([{id:1,teeth:[],name:"",fee:"",priority:"moderate",customRisk:""}]); setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]); setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null); setShowPreview(false); setCollectSignatures(false); setSigStep("patient"); setSavedToProfile(false); setPushWarranty(true); setEmailSent(false); setShowReceipt(false); setPaymentMethod("debit"); setDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
   const resetWarranty = () => { setWName(""); setWItems([]); setWCustom(""); setWChoice("agree"); setWSig(null); setWPreview(false); setWCollectSig(false); setWDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
-  const resetReceipt = () => { setRcptName(""); setRcptEmail(""); setRcptPhone(""); setRcptItems([{id:1,desc:"",amount:""}]); setRcptPayMethod("debit"); setRcptDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); setRcptDiscount(""); setRcptInsurance(""); setRcptShowPreview(false); setRcptNote(""); };
+  const resetReceipt = () => { setRcptName(""); setRcptEmail(""); setRcptPhone(""); setRcptItems([{id:1,desc:"",amount:""}]); setRcptPayMethod("debit"); setRcptDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); setRcptDiscount(""); setRcptInsurance(""); setRcptShowPreview(false); setRcptNote(""); setRcptCCSurcharge(false); };
 
   const saveRecord = (recordType, details) => {
     if (!patientName.trim()) return;
@@ -331,7 +333,7 @@ export default function TreatmentPlan() {
   if (appMode === "receipt") {
     if (rcptShowPreview) {
       const rcptNum = `BFD-${Date.now().toString().slice(-8)}`;
-      const rcptEmailBody = `Dear ${rcptName},\n\nThank you for your payment at Buchwald Family Dentistry.\n\nReceipt #: ${rcptNum}\nDate: ${rcptDate}\nPayment: ${rcptPayMethod}\n\nServices:\n${rcptItems.filter(i=>i.desc).map(i=>`  ${i.desc}: $${(parseFloat(i.amount)||0).toFixed(2)}`).join("\n")}${rcptDiscNum>0?`\n\nDiscount: -$${rcptDiscNum.toFixed(2)}`:""}${rcptInsNum>0?`\nInsurance Applied: -$${rcptInsNum.toFixed(2)}`:""}\n\nTotal Paid: $${rcptTotal.toFixed(2)}${rcptNote?`\n\nNote: ${rcptNote}`:""}\n\nThank you for choosing Buchwald Family Dentistry!\n\n---\nBuchwald Family Dentistry & Orthodontics\n300 N. Coit Rd, Ste 245, Richardson, TX 75080\nbuchwaldfamilydentistry.com`;
+      const rcptEmailBody = `Dear ${rcptName},\n\nThank you for your payment at Buchwald Family Dentistry.\n\nReceipt #: ${rcptNum}\nDate: ${rcptDate}\nPayment: ${rcptPayMethod}\n\nServices:\n${rcptItems.filter(i=>i.desc).map(i=>`  ${i.desc}: $${(parseFloat(i.amount)||0).toFixed(2)}`).join("\n")}${rcptCCFee>0?`\n\nCredit Card Processing Fee (3%): +$${rcptCCFee.toFixed(2)}`:""}${rcptDiscNum>0?`\nDiscount: -$${rcptDiscNum.toFixed(2)}`:""}${rcptInsNum>0?`\nInsurance Applied: -$${rcptInsNum.toFixed(2)}`:""}\n\nTotal Paid: $${rcptTotal.toFixed(2)}${rcptNote?`\n\nNote: ${rcptNote}`:""}\n\nThis receipt may be used for insurance reimbursement or tax deduction purposes.\n\nThank you for choosing Buchwald Family Dentistry!\n\n---\nDr. Max Buchwald Jr, DDS\nBuchwald Family Dentistry & Orthodontics\n300 N. Coit Rd, Ste 245, Richardson, TX 75080\n(972) 644-3280 | buchwaldfamilydentistry.com`;
       return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
         <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
         <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:GREEN, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
@@ -383,6 +385,7 @@ export default function TreatmentPlan() {
           <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:24 }}>
             <div style={{ width:240 }}>
               <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:12, color:GRAY }}><span>Subtotal</span><span style={{ fontWeight:600, color:DARK }}>${rcptSubtotal.toFixed(2)}</span></div>
+              {rcptCCFee > 0 && <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:12, color:DARK }}><span>Credit Card Fee (3%)</span><span style={{ fontWeight:600 }}>+${rcptCCFee.toFixed(2)}</span></div>}
               {rcptDiscNum > 0 && <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:12, color:GREEN }}><span>Discount</span><span style={{ fontWeight:600 }}>-${rcptDiscNum.toFixed(2)}</span></div>}
               {rcptInsNum > 0 && <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", fontSize:12, color:GRAY }}><span>Insurance Applied</span><span style={{ fontWeight:600 }}>-${rcptInsNum.toFixed(2)}</span></div>}
               <div style={{ display:"flex", justifyContent:"space-between", padding:"10px 0 6px", fontSize:16, fontWeight:800, color:DARK, borderTop:`2px solid ${DARK}`, marginTop:4 }}><span>Total Paid</span><span>${rcptTotal.toFixed(2)}</span></div>
@@ -427,11 +430,17 @@ export default function TreatmentPlan() {
         <div style={CS}><div style={SL}>Payment Details</div>
           <label style={LS}>Payment Method</label>
           <select value={rcptPayMethod} onChange={e => setRcptPayMethod(e.target.value)} style={{ ...IS, appearance:"auto" }}><option value="debit">Debit</option><option value="cash">Cash</option><option value="check">Check</option><option value="credit card">Credit Card</option><option value="CareCredit">CareCredit</option><option value="Cherry">Cherry</option><option value="insurance">Insurance</option></select>
+          {/* CC Surcharge Toggle */}
+          <div onClick={() => setRcptCCSurcharge(!rcptCCSurcharge)} style={{ display:"flex", alignItems:"center", gap:10, marginTop:14, marginBottom:4, cursor:"pointer", padding:"10px 14px", background:rcptCCSurcharge?GOLD_BG:"#f7f9fb", border:`1.5px solid ${rcptCCSurcharge?GOLD:"#e0e0e0"}`, borderRadius:10 }}>
+            <div style={{ width:42, height:24, borderRadius:12, background:rcptCCSurcharge?GOLD:"#ccc", position:"relative", flexShrink:0 }}><div style={{ width:20, height:20, borderRadius:10, background:"white", position:"absolute", top:2, left:rcptCCSurcharge?20:2, transition:"left 0.2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }} /></div>
+            <div><div style={{ fontSize:14, fontWeight:700, color:rcptCCSurcharge?GOLD:DARK }}>Add 3% Credit Card Fee</div>{rcptCCSurcharge && rcptSubtotal > 0 && <div style={{ fontSize:12, color:GOLD }}>+${rcptCCFee.toFixed(2)}</div>}</div>
+          </div>
           <label style={LS}>Discount <span style={{ fontWeight:400, color:"#999" }}>(optional)</span></label><div style={{ position:"relative" }}><span style={DS}>$</span><input type="number" inputMode="decimal" value={rcptDiscount} onChange={e => setRcptDiscount(e.target.value)} placeholder="0" style={{ ...IS, paddingLeft:28 }} /></div>
           <label style={LS}>Insurance Applied <span style={{ fontWeight:400, color:"#999" }}>(optional)</span></label><div style={{ position:"relative" }}><span style={DS}>$</span><input type="number" inputMode="decimal" value={rcptInsurance} onChange={e => setRcptInsurance(e.target.value)} placeholder="0" style={{ ...IS, paddingLeft:28 }} /></div>
           <label style={LS}>Note <span style={{ fontWeight:400, color:"#999" }}>(optional - prints on receipt)</span></label><input type="text" value={rcptNote} onChange={e => setRcptNote(e.target.value)} placeholder="Next appointment, follow-up..." style={IS} />
           {rcptSubtotal > 0 && <div style={{ marginTop:16, background:"#f7f9fb", borderRadius:10, padding:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, fontWeight:600, color:DARK, marginBottom:4 }}><span>Subtotal</span><span>${rcptSubtotal.toFixed(2)}</span></div>
+            {rcptCCFee > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:GOLD, marginBottom:4 }}><span>CC Fee (3%)</span><span>+${rcptCCFee.toFixed(2)}</span></div>}
             {rcptDiscNum > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:GREEN, marginBottom:4 }}><span>Discount</span><span>-${rcptDiscNum.toFixed(2)}</span></div>}
             {rcptInsNum > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:GRAY, marginBottom:4 }}><span>Insurance</span><span>-${rcptInsNum.toFixed(2)}</span></div>}
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:16, fontWeight:800, color:GREEN, background:GREEN_BG, margin:"6px -8px 0", padding:"10px 8px", borderRadius:"0 0 8px 8px" }}><span>Total</span><span>${rcptTotal.toFixed(2)}</span></div>
