@@ -221,46 +221,308 @@ export default function TreatmentPlan() {
     setWarrantyDate(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   };
 
-  // ========== MODE SELECTOR ==========
-  if (appMode === null) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-        <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 34, height: 34, background: "white", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-            <img src="/logo.png" alt="" style={{ width: 30, height: "auto" }} />
+  // ========== HUB STATE ==========
+  const [hubTab, setHubTab] = useState("home"); // home | members | records
+  const [hubStats, setHubStats] = useState({ members: 0, plansToday: 0, warranties: 0 });
+  const [planMembers, setPlanMembers] = useState([]);
+  const [patientRecords, setPatientRecords] = useState([]);
+  const [hubLoading, setHubLoading] = useState(true);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [recordSearch, setRecordSearch] = useState("");
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [newMember, setNewMember] = useState({ first_name: "", last_name: "", phone: "", dob: "", notes: "" });
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [patientNotes, setPatientNotes] = useState([]);
+  const [newNote, setNewNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
+  const SUPA_URL = "https://qkvpmnpawspdndbcdegs.supabase.co";
+  const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFrdnBtbnBhd3NwZG5kYmNkZWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMzExMTIsImV4cCI6MjA4ODYwNzExMn0.W9itnRCbyXFTl3gsO85p-hlypcyMqjDI_L4Ze6w24zE";
+  const supaFetch = (path, opts = {}) => fetch(`${SUPA_URL}/rest/v1/${path}`, {
+    headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "return=representation", ...opts.headers },
+    ...opts,
+  });
+
+  useEffect(() => {
+    if (appMode !== null) return;
+    setHubLoading(true);
+    Promise.all([
+      supaFetch("profiles?plan_status=eq.active&select=id,first_name,last_name,phone,dob,plan_start_date,plan_end_date,plan_status,created_at&order=created_at.desc"),
+      supaFetch("profiles?select=id,first_name,last_name,phone,dob,plan_status,created_at&order=created_at.desc&limit=200"),
+    ]).then(async ([membersRes, recordsRes]) => {
+      const members = await membersRes.json();
+      const records = await recordsRes.json();
+      const today = new Date().toDateString();
+      setPlanMembers(Array.isArray(members) ? members : []);
+      setPatientRecords(Array.isArray(records) ? records : []);
+      // stats
+      const plansToday = Array.isArray(records) ? records.filter(r => new Date(r.created_at).toDateString() === today).length : 0;
+      setHubStats({ members: Array.isArray(members) ? members.length : 0, plansToday, warranties: 0 });
+      // recent activity
+      const recent = Array.isArray(records) ? records.slice(0, 5).map(r => ({
+        name: `${r.first_name} ${r.last_name}`,
+        action: r.plan_status === "active" ? "enrolled in-office plan" : "added as patient",
+        date: new Date(r.created_at),
+      })) : [];
+      setRecentActivity(recent);
+      setHubLoading(false);
+    }).catch(() => setHubLoading(false));
+  }, [appMode]);
+
+  const loadPatientNotes = async (patientId) => {
+    const res = await supaFetch(`patient_notes?patient_id=eq.${patientId}&order=created_at.desc`);
+    const data = await res.json();
+    setPatientNotes(Array.isArray(data) ? data : []);
+  };
+
+  const saveNote = async () => {
+    if (!newNote.trim() || !selectedPatient) return;
+    setSavingNote(true);
+    await supaFetch("patient_notes", {
+      method: "POST",
+      body: JSON.stringify({ patient_id: selectedPatient.id, admin_id: selectedPatient.id, note: newNote.trim(), flag_color: "none" }),
+    });
+    setNewNote("");
+    await loadPatientNotes(selectedPatient.id);
+    setSavingNote(false);
+  };
+
+  const addMember = async () => {
+    if (!newMember.first_name || !newMember.last_name) return;
+    setAddMemberLoading(true);
+    const payload = {
+      id: crypto.randomUUID(),
+      email: `${newMember.first_name.toLowerCase()}.${newMember.last_name.toLowerCase()}.${Date.now()}@buchwald.internal`,
+      first_name: newMember.first_name,
+      last_name: newMember.last_name,
+      phone: newMember.phone || "",
+      dob: newMember.dob || null,
+      role: "user",
+      plan_status: "active",
+      plan_start_date: new Date().toISOString().split("T")[0],
+      plan_end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    };
+    await supaFetch("profiles", { method: "POST", body: JSON.stringify(payload) });
+    if (newMember.notes.trim()) {
+      await supaFetch("patient_notes", { method: "POST", body: JSON.stringify({ patient_id: payload.id, admin_id: payload.id, note: newMember.notes.trim(), flag_color: "none" }) });
+    }
+    setNewMember({ first_name: "", last_name: "", phone: "", dob: "", notes: "" });
+    setShowAddMember(false);
+    setAddMemberLoading(false);
+    // refresh
+    setAppMode("__refresh__");
+    setTimeout(() => setAppMode(null), 50);
+  };
+
+  const fmtDate = (d) => { if (!d) return ""; try { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return ""; } };
+  const timeAgo = (d) => { const diff = Date.now() - new Date(d); const mins = Math.floor(diff / 60000); if (mins < 60) return `${mins}m ago`; const hrs = Math.floor(mins / 60); if (hrs < 24) return `${hrs}h ago`; return `${Math.floor(hrs / 24)}d ago`; };
+
+  // ========== MODE SELECTOR / HUB ==========
+  if (appMode === null || appMode === "__refresh__") {
+    if (appMode === "__refresh__") return null;
+
+    const filteredMembers = planMembers.filter(m =>
+      `${m.first_name} ${m.last_name}`.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      (m.phone || "").includes(memberSearch)
+    );
+    const filteredRecords = patientRecords.filter(r =>
+      `${r.first_name} ${r.last_name}`.toLowerCase().includes(recordSearch.toLowerCase()) ||
+      (r.phone || "").includes(recordSearch)
+    );
+
+    if (selectedPatient) {
+      return (
+        <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+          <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => { setSelectedPatient(null); setPatientNotes([]); }} style={toolbarBtn}>← Back</button>
+            <div style={{ color: "white", fontSize: 16, fontWeight: 700 }}>{selectedPatient.first_name} {selectedPatient.last_name}</div>
           </div>
-          <div>
-            <div style={{ color: "white", fontSize: 16, fontWeight: 700 }}>Buchwald Family Dentistry</div>
-            <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11 }}>Patient Forms</div>
+          <div style={{ padding: "16px", maxWidth: 480, margin: "0 auto" }}>
+            <div style={{ background: "white", borderRadius: 12, padding: 20, marginBottom: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Patient Info</div>
+              {[["Phone", selectedPatient.phone], ["Date of birth", fmtDate(selectedPatient.dob)], ["Plan status", selectedPatient.plan_status], ["Member since", fmtDate(selectedPatient.plan_start_date)], ["Renewal", fmtDate(selectedPatient.plan_end_date)]].map(([label, val]) => val ? (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
+                  <span style={{ color: GRAY }}>{label}</span><span style={{ fontWeight: 600 }}>{val}</span>
+                </div>
+              ) : null)}
+            </div>
+            <div style={{ background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: BLUE, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Notes</div>
+              {patientNotes.length === 0 && <div style={{ fontSize: 13, color: GRAY, marginBottom: 12 }}>No notes yet.</div>}
+              {patientNotes.map(n => (
+                <div key={n.id} style={{ background: "#f7f9fb", borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13 }}>{n.note}</div>
+                  <div style={{ fontSize: 11, color: GRAY, marginTop: 4 }}>{fmtDate(n.created_at)}</div>
+                </div>
+              ))}
+              <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add a note..." style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 14, resize: "vertical", minHeight: 80, boxSizing: "border-box", marginTop: 8 }} />
+              <button onClick={saveNote} disabled={savingNote || !newNote.trim()} style={{ width: "100%", padding: 14, background: newNote.trim() ? BLUE : "#ccc", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: newNote.trim() ? "pointer" : "not-allowed", marginTop: 8 }}>
+                {savingNote ? "Saving..." : "Save Note"}
+              </button>
+            </div>
           </div>
         </div>
-        <div style={{ padding: "40px 16px", maxWidth: 480, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: DARK, marginBottom: 6 }}>What would you like to create?</div>
-            <div style={{ fontSize: 14, color: GRAY }}>Select a form type below</div>
+      );
+    }
+
+    return (
+      <div style={{ minHeight: "100vh", background: "#f7f9fb", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+        <style>{`@media print { body { display: none; } }`}</style>
+        {/* Header */}
+        <div style={{ background: BLUE, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 34, height: 34, background: "white", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              <img src="/logo.png" alt="" style={{ width: 30, height: "auto" }} />
+            </div>
+            <div>
+              <div style={{ color: "white", fontSize: 15, fontWeight: 700 }}>Buchwald Family Dentistry</div>
+              <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 11 }}>Staff Hub</div>
+            </div>
           </div>
+        </div>
 
-          <button onClick={() => setAppMode("treatment")} style={{ width: "100%", padding: "24px 20px", background: "white", border: "2px solid #e0e0e0", borderRadius: 14, marginBottom: 14, cursor: "pointer", textAlign: "left", transition: "all 0.2s" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: LIGHT_BLUE, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📋</div>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: DARK, marginBottom: 3 }}>Treatment Plan</div>
-                <div style={{ fontSize: 13, color: GRAY, lineHeight: 1.4 }}>Create a treatment plan with pricing, insurance, financing, and signatures</div>
+        {/* Tab Bar */}
+        <div style={{ background: "white", borderBottom: "1px solid #e8e8e8", display: "flex" }}>
+          {[["home","🏠","Home"], ["members","⭐","Plan Members"], ["records","📁","Records"]].map(([tab, icon, label]) => (
+            <button key={tab} onClick={() => setHubTab(tab)} style={{ flex: 1, padding: "12px 4px", background: "none", border: "none", borderBottom: hubTab === tab ? `3px solid ${BLUE}` : "3px solid transparent", color: hubTab === tab ? BLUE : GRAY, fontSize: 12, fontWeight: hubTab === tab ? 700 : 400, cursor: "pointer" }}>
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ padding: "16px", maxWidth: 480, margin: "0 auto" }}>
+
+          {/* HOME TAB */}
+          {hubTab === "home" && (
+            <>
+              {/* Stats */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {[["⭐", hubStats.members, "plan members"], ["📋", hubStats.plansToday, "added today"], ["🛡️", hubStats.warranties, "warranties"]].map(([icon, val, label]) => (
+                  <div key={label} style={{ background: "white", borderRadius: 12, padding: "14px 10px", textAlign: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.07)" }}>
+                    <div style={{ fontSize: 20 }}>{icon}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: DARK, lineHeight: 1.2 }}>{hubLoading ? "–" : val}</div>
+                    <div style={{ fontSize: 11, color: GRAY, marginTop: 2 }}>{label}</div>
+                  </div>
+                ))}
               </div>
-            </div>
-          </button>
 
-          <button onClick={() => setAppMode("warranty")} style={{ width: "100%", padding: "24px 20px", background: "white", border: "2px solid #e0e0e0", borderRadius: 14, marginBottom: 14, cursor: "pointer", textAlign: "left", transition: "all 0.2s" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: "#FFF7E0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🛡️</div>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: DARK, marginBottom: 3 }}>Lifetime Warranty Form</div>
-                <div style={{ fontSize: 13, color: GRAY, lineHeight: 1.4 }}>Document treatments covered under the lifetime warranty policy</div>
+              {/* Quick Actions */}
+              <div style={{ fontSize: 12, fontWeight: 700, color: GRAY, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Quick Actions</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <button onClick={() => setAppMode("treatment")} style={{ padding: "18px 16px", background: BLUE, border: "none", borderRadius: 14, cursor: "pointer", textAlign: "left", color: "white" }}>
+                  <div style={{ fontSize: 22, marginBottom: 6 }}>📋</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Treatment Plan</div>
+                  <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>New form</div>
+                </button>
+                <button onClick={() => setAppMode("warranty")} style={{ padding: "18px 16px", background: "white", border: "2px solid #e0e0e0", borderRadius: 14, cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ fontSize: 22, marginBottom: 6 }}>🛡️</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: DARK }}>Lifetime Warranty</div>
+                  <div style={{ fontSize: 11, color: GRAY, marginTop: 2 }}>New form</div>
+                </button>
+                <button onClick={() => { setHubTab("members"); setShowAddMember(true); }} style={{ padding: "18px 16px", background: "white", border: "2px solid #e0e0e0", borderRadius: 14, cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ fontSize: 22, marginBottom: 6 }}>➕</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: DARK }}>Add Member</div>
+                  <div style={{ fontSize: 11, color: GRAY, marginTop: 2 }}>In-office plan</div>
+                </button>
+                <button onClick={() => setHubTab("records")} style={{ padding: "18px 16px", background: "white", border: "2px solid #e0e0e0", borderRadius: 14, cursor: "pointer", textAlign: "left" }}>
+                  <div style={{ fontSize: 22, marginBottom: 6 }}>📁</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: DARK }}>Patient Records</div>
+                  <div style={{ fontSize: 11, color: GRAY, marginTop: 2 }}>Search &amp; notes</div>
+                </button>
               </div>
-            </div>
-          </button>
 
-          <div style={{ textAlign: "center", fontSize: 12, color: GRAY, padding: "16px 0" }}>Add to Home Screen for quick access</div>
+              {/* Recent Activity */}
+              <div style={{ fontSize: 12, fontWeight: 700, color: GRAY, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Recent Activity</div>
+              <div style={{ background: "white", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.07)", overflow: "hidden" }}>
+                {hubLoading && <div style={{ padding: 20, textAlign: "center", color: GRAY, fontSize: 13 }}>Loading...</div>}
+                {!hubLoading && recentActivity.length === 0 && <div style={{ padding: 20, textAlign: "center", color: GRAY, fontSize: 13 }}>No activity yet</div>}
+                {recentActivity.map((a, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: i < recentActivity.length - 1 ? "1px solid #f0f0f0" : "none" }}>
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: DARK }}>{a.name}</span>
+                      <span style={{ fontSize: 13, color: GRAY }}> — {a.action}</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: GRAY, flexShrink: 0, marginLeft: 8 }}>{timeAgo(a.date)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* MEMBERS TAB */}
+          {hubTab === "members" && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: DARK }}>In-Office Plan Members <span style={{ color: BLUE }}>({planMembers.length})</span></div>
+                <button onClick={() => setShowAddMember(!showAddMember)} style={{ background: BLUE, color: "white", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Add</button>
+              </div>
+
+              {showAddMember && (
+                <div style={{ background: "white", borderRadius: 12, padding: 20, marginBottom: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: DARK, marginBottom: 14 }}>New Plan Member</div>
+                  {[["First name *", "first_name", "text"], ["Last name *", "last_name", "text"], ["Phone", "phone", "tel"], ["Date of birth", "dob", "date"]].map(([label, field, type]) => (
+                    <div key={field} style={{ marginBottom: 10 }}>
+                      <label style={{ fontSize: 12, color: GRAY, display: "block", marginBottom: 4 }}>{label}</label>
+                      <input type={type} value={newMember[field]} onChange={e => setNewMember(p => ({ ...p, [field]: e.target.value }))}
+                        style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
+                    </div>
+                  ))}
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 12, color: GRAY, display: "block", marginBottom: 4 }}>Notes (optional)</label>
+                    <textarea value={newMember.notes} onChange={e => setNewMember(p => ({ ...p, notes: e.target.value }))}
+                      style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0e0e0", borderRadius: 8, fontSize: 14, resize: "vertical", minHeight: 60, boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => setShowAddMember(false)} style={{ flex: 1, padding: 12, background: "#f0f0f0", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Cancel</button>
+                    <button onClick={addMember} disabled={addMemberLoading || !newMember.first_name || !newMember.last_name}
+                      style={{ flex: 2, padding: 12, background: newMember.first_name && newMember.last_name ? BLUE : "#ccc", color: "white", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                      {addMemberLoading ? "Saving..." : "Enroll Member"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Search by name or phone..." style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 15, marginBottom: 12, boxSizing: "border-box" }} />
+
+              {hubLoading && <div style={{ textAlign: "center", color: GRAY, padding: 20 }}>Loading...</div>}
+              {!hubLoading && filteredMembers.length === 0 && <div style={{ textAlign: "center", color: GRAY, padding: 20, fontSize: 13 }}>No members found</div>}
+              {filteredMembers.map(m => (
+                <div key={m.id} onClick={() => { setSelectedPatient(m); loadPatientNotes(m.id); }}
+                  style={{ background: "white", borderRadius: 12, padding: "14px 16px", marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.07)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: DARK }}>{m.first_name} {m.last_name}</div>
+                    {m.phone && <div style={{ fontSize: 12, color: GRAY, marginTop: 2 }}>{m.phone}</div>}
+                    {m.plan_end_date && <div style={{ fontSize: 12, color: GRAY }}>Renews {fmtDate(m.plan_end_date)}</div>}
+                  </div>
+                  <div style={{ background: "#e6f9ee", color: "#2d8a4e", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 }}>Active</div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* RECORDS TAB */}
+          {hubTab === "records" && (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 700, color: DARK, marginBottom: 12 }}>Patient Records <span style={{ color: BLUE }}>({patientRecords.length})</span></div>
+              <input value={recordSearch} onChange={e => setRecordSearch(e.target.value)} placeholder="Search by name or phone..." style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: 10, fontSize: 15, marginBottom: 12, boxSizing: "border-box" }} />
+              {hubLoading && <div style={{ textAlign: "center", color: GRAY, padding: 20 }}>Loading...</div>}
+              {!hubLoading && filteredRecords.length === 0 && <div style={{ textAlign: "center", color: GRAY, padding: 20, fontSize: 13 }}>No records found</div>}
+              {filteredRecords.map(r => (
+                <div key={r.id} onClick={() => { setSelectedPatient(r); loadPatientNotes(r.id); }}
+                  style={{ background: "white", borderRadius: 12, padding: "14px 16px", marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.07)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: DARK }}>{r.first_name} {r.last_name}</div>
+                    {r.phone && <div style={{ fontSize: 12, color: GRAY, marginTop: 2 }}>{r.phone}</div>}
+                    <div style={{ fontSize: 12, color: GRAY }}>Added {fmtDate(r.created_at)}</div>
+                  </div>
+                  {r.plan_status === "active" && <div style={{ background: "#e6f9ee", color: "#2d8a4e", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 }}>Plan</div>}
+                </div>
+              ))}
+            </>
+          )}
+
         </div>
       </div>
     );
