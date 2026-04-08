@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
 function savePDF(elementId, filename) {
   if (!window.html2pdf) { alert("PDF library loading, try again in a moment."); return; }
@@ -110,6 +111,39 @@ export default function TreatmentPlan() {
   const [forceRefresh, setForceRefresh] = useState(0);
   useEffect(() => { if (!document.getElementById("html2pdf-script")) { const s = document.createElement("script"); s.id = "html2pdf-script"; s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"; document.head.appendChild(s); } }, []);
 
+  // Pull from Supabase on mount and merge into localStorage for cross-device sync
+  useEffect(() => {
+    async function syncFromSupabase() {
+      try {
+        const [{ data: profiles }, { data: treatments }, { data: notes }] = await Promise.all([
+          supabase.from("profiles").select("*"),
+          supabase.from("pending_treatments").select("*"),
+          supabase.from("patient_notes").select("*"),
+        ]);
+        if (profiles && profiles.length > 0) {
+          const local = db_load("patients", []);
+          const merged = [...profiles];
+          local.forEach(p => { if (!merged.find(m => m.id === p.id)) merged.push(p); });
+          db_save("patients", merged);
+        }
+        if (treatments && treatments.length > 0) {
+          const local = db_load("treatments", []);
+          const merged = [...treatments];
+          local.forEach(t => { if (!merged.find(m => m.id === t.id)) merged.push(t); });
+          db_save("treatments", merged);
+        }
+        if (notes && notes.length > 0) {
+          const local = db_load("notes", []);
+          const merged = [...notes];
+          local.forEach(n => { if (!merged.find(m => m.id === n.id)) merged.push(n); });
+          db_save("notes", merged);
+        }
+        setForceRefresh(p => p + 1);
+      } catch {}
+    }
+    syncFromSupabase();
+  }, []);
+
   // Treatment plan
   const [patientName, setPatientName] = useState("");
   const [patientEmail, setPatientEmail] = useState("");
@@ -149,6 +183,7 @@ export default function TreatmentPlan() {
   // Hub
   const [hubTab, setHubTab] = useState("home");
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [search, setSearch] = useState(""); const [newNote, setNewNote] = useState("");
 
   // Calcs
@@ -191,7 +226,11 @@ export default function TreatmentPlan() {
     if (patientEmail) patient.email = patientEmail;
     if (patientPhone) patient.phone = patientPhone;
     db_savePatient(patient);
-    db_saveTreatment({ patient_id: patient.id, type: recordType, cost: details.total || 0, status: "presented", summary: details.summary, items: details.items || [] });
+    const treatment = { id: crypto.randomUUID(), patient_id: patient.id, type: recordType, cost: details.total || 0, status: "presented", summary: details.summary, items: details.items || [], created_at: new Date().toISOString() };
+    db_saveTreatment(treatment);
+    // Supabase sync (fire and forget)
+    supabase.from("profiles").upsert({ ...patient, updated_at: new Date().toISOString() }).catch(() => {});
+    supabase.from("pending_treatments").upsert(treatment).catch(() => {});
     setSavedToProfile(true);
   };
 
@@ -228,11 +267,10 @@ export default function TreatmentPlan() {
     const statusFlow = ["presented","signed","paid"];
     const statusLabels = { presented:"Presented", signed:"Signed", paid:"Paid" };
     const statusColors = { presented:{ bg:LIGHT_BLUE, text:BLUE }, signed:{ bg:GOLD_BG, text:GOLD }, paid:{ bg:GREEN_BG, text:GREEN } };
-    const [confirmDelete, setConfirmDelete] = useState(false);
     return (
       <div style={{ minHeight:"100vh", background:"#f7f9fb", fontFamily:"'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ background:BLUE, padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <button onClick={() => setSelectedPatient(null)} style={TB}>{"\u2190"} Back</button>
+          <button onClick={() => { setSelectedPatient(null); setConfirmDelete(false); }} style={TB}>{"\u2190"} Back</button>
           <div style={{ color:"white", fontSize:16, fontWeight:700 }}>{selectedPatient.first_name} {selectedPatient.last_name}</div>
           <button onClick={() => { setAppMode("treatment"); setPatientName(`${selectedPatient.first_name} ${selectedPatient.last_name}`); if (pe) setPatientEmail(pe); if (selectedPatient.phone) setPatientPhone(selectedPatient.phone); setSelectedPatient(null); }} style={TB}>+ Plan</button>
         </div>
@@ -248,8 +286,8 @@ export default function TreatmentPlan() {
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: isOnPlan ? 14 : 0 }}>
               <div style={SL}>{"\u2B50"} In-Office Cleaning Plan</div>
               {isOnPlan
-                ? <button onClick={() => { db_unenrollPlan(selectedPatient.id); setSelectedPatient({...selectedPatient, plan_status:"none"}); setForceRefresh(p=>p+1); }} style={{ fontSize:11, color:RED, background:"none", border:`1px solid ${RED}`, borderRadius:6, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>Remove</button>
-                : <button onClick={() => { db_enrollPlan(selectedPatient.id); setSelectedPatient({...selectedPatient, plan_status:"active", plan_start_date: new Date().toISOString().split("T")[0]}); setForceRefresh(p=>p+1); }} style={{ fontSize:12, color:"white", background:GOLD, border:"none", borderRadius:8, padding:"8px 14px", cursor:"pointer", fontWeight:700 }}>Enroll in Plan</button>
+                ? <button onClick={() => { db_unenrollPlan(selectedPatient.id); supabase.from("profiles").update({ plan_status: "none", updated_at: new Date().toISOString() }).eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient({...selectedPatient, plan_status:"none"}); setForceRefresh(p=>p+1); }} style={{ fontSize:11, color:RED, background:"none", border:`1px solid ${RED}`, borderRadius:6, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>Remove</button>
+                : <button onClick={() => { const planStart = new Date().toISOString().split("T")[0]; db_enrollPlan(selectedPatient.id); supabase.from("profiles").update({ plan_status: "active", plan_start_date: planStart, updated_at: new Date().toISOString() }).eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient({...selectedPatient, plan_status:"active", plan_start_date: planStart}); setForceRefresh(p=>p+1); }} style={{ fontSize:12, color:"white", background:GOLD, border:"none", borderRadius:8, padding:"8px 14px", cursor:"pointer", fontWeight:700 }}>Enroll in Plan</button>
               }
             </div>
             {isOnPlan && (<>
@@ -293,7 +331,7 @@ export default function TreatmentPlan() {
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}><div style={{ fontSize:14, fontWeight:700, color:DARK }}>{t.type}</div>{t.cost > 0 && <div style={{ fontSize:13, fontWeight:700, color:BLUE }}>${parseFloat(t.cost).toFixed(2)}</div>}</div>
               {t.summary && <div style={{ fontSize:12, color:GRAY, marginBottom:8, lineHeight:1.4 }}>{t.summary}</div>}
               <div style={{ fontSize:11, color:GRAY, marginBottom:8 }}>{fmtDate(t.created_at)}</div>
-              <div style={{ display:"flex", gap:6, marginBottom:8 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
+              <div style={{ display:"flex", gap:6, marginBottom:8 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); supabase.from("pending_treatments").update({ status: s }).eq("id", t.id).catch(() => {}); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
               {/* Send Receipt button */}
               <button onClick={() => {
                 setRcptName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
@@ -314,7 +352,7 @@ export default function TreatmentPlan() {
           <div style={CS}><div style={SL}>Notes</div>
             {notes.map(n => <div key={n.id} style={{ background:"#f7f9fb", borderRadius:8, padding:"10px 12px", marginBottom:8 }}><div style={{ fontSize:13 }}>{n.note}</div><div style={{ fontSize:11, color:GRAY, marginTop:4 }}>{fmtDate(n.created_at)}</div></div>)}
             <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add a note..." style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e0e0e0", borderRadius:10, fontSize:14, resize:"vertical", minHeight:80, boxSizing:"border-box", marginTop:8 }} />
-            <button onClick={() => { if (newNote.trim()) { db_saveNote(selectedPatient.id, newNote.trim()); setNewNote(""); setForceRefresh(p=>p+1); } }} disabled={!newNote.trim()} style={{ width:"100%", padding:14, background:newNote.trim()?BLUE:"#ccc", color:"white", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:newNote.trim()?"pointer":"not-allowed", marginTop:8 }}>Save Note</button>
+            <button onClick={() => { if (newNote.trim()) { const noteId = crypto.randomUUID(); const noteCreatedAt = new Date().toISOString(); db_saveNote(selectedPatient.id, newNote.trim()); supabase.from("patient_notes").insert({ id: noteId, patient_id: selectedPatient.id, note: newNote.trim(), created_at: noteCreatedAt }).catch(() => {}); setNewNote(""); setForceRefresh(p=>p+1); } }} disabled={!newNote.trim()} style={{ width:"100%", padding:14, background:newNote.trim()?BLUE:"#ccc", color:"white", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:newNote.trim()?"pointer":"not-allowed", marginTop:8 }}>Save Note</button>
           </div>
 
           {/* Delete Patient */}
@@ -326,7 +364,7 @@ export default function TreatmentPlan() {
                   <div style={{ fontSize:12, color:GRAY, marginBottom:12 }}>This will permanently remove their profile, all treatment records, notes, and cleaning history.</div>
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={() => setConfirmDelete(false)} style={{ flex:1, padding:12, background:"#f0f0f0", border:"none", borderRadius:8, fontSize:14, cursor:"pointer" }}>Cancel</button>
-                    <button onClick={() => { db_deletePatient(selectedPatient.id); setSelectedPatient(null); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:12, background:RED, color:"white", border:"none", borderRadius:8, fontSize:14, fontWeight:700, cursor:"pointer" }}>Delete</button>
+                    <button onClick={() => { db_deletePatient(selectedPatient.id); supabase.from("profiles").delete().eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient(null); setConfirmDelete(false); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:12, background:RED, color:"white", border:"none", borderRadius:8, fontSize:14, fontWeight:700, cursor:"pointer" }}>Delete</button>
                   </div>
                 </div>
             }
