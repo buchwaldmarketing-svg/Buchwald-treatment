@@ -464,7 +464,7 @@ export default function TreatmentPlan() {
               {t.summary && <div style={{ fontSize:12, color:GRAY, marginBottom:8, lineHeight:1.4 }}>{t.summary}</div>}
               <div style={{ fontSize:11, color:GRAY, marginBottom:8 }}>{fmtDate(t.created_at)}</div>
               <div style={{ display:"flex", gap:6, marginBottom:8 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); supabase.from("pending_treatments").update({ status: s }).eq("id", t.id).catch(() => {}); setForceRefresh(p=>p+1); showToast(`Status updated to ${s}.`); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
-              {/* Send Receipt button */}
+              {/* Send Copy / Send Receipt button */}
               <button onClick={() => {
                 setRcptName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
                 if (pe) setRcptEmail(pe);
@@ -476,7 +476,7 @@ export default function TreatmentPlan() {
                 }
                 setSelectedPatient(null);
                 setAppMode("receipt");
-              }} style={{ width:"100%", padding:"8px 12px", background:"white", color:GREEN, border:`1.5px solid ${GREEN}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:6 }}>{"\u{1F9FE}"} Send Receipt</button>
+              }} style={{ width:"100%", padding:"8px 12px", background:"white", color:GREEN, border:`1.5px solid ${GREEN}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:6 }}>{t.status === "paid" ? "\u{1F9FE} Send Receipt" : "\u{1F4CB} Send Copy"}</button>
               {confirmDeleteTx === t.id
                 ? <div style={{ background:"#FFF3F3", border:`1.5px solid ${RED}`, borderRadius:8, padding:"10px 12px" }}>
                     <div style={{ fontSize:13, fontWeight:700, color:RED, marginBottom:6 }}>Delete this treatment record?</div>
