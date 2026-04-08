@@ -212,6 +212,7 @@ export default function TreatmentPlan() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState("login"); // "login" | "signup"
 
   // Calcs
   const subtotal = treatments.reduce((s, t) => s + (parseFloat(t.fee) || 0), 0);
@@ -297,21 +298,47 @@ export default function TreatmentPlan() {
       const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
       if (error) setAuthError("Invalid email or password.");
     };
+    const handleSignUp = async () => {
+      setAuthError("");
+      if (!authEmail || !authPassword) { setAuthError("Email and password are required."); return; }
+      if (authPassword.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
+      const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+      if (error) setAuthError(error.message);
+      else setAuthMode("success");
+    };
+    if (authMode === "success") return (
+      <div style={{ minHeight:"100vh", background:"#f7f9fb", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Segoe UI', system-ui, sans-serif", padding:20 }}>
+        <div style={{ width:"100%", maxWidth:380 }}>
+          <div style={{ textAlign:"center", marginBottom:24 }}><img src="/logo.png" alt="Buchwald" style={{ width:160, height:"auto" }} /></div>
+          <div style={{ ...CS, textAlign:"center", padding:32 }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>✓</div>
+            <div style={{ fontSize:17, fontWeight:700, color:GREEN, marginBottom:8 }}>Account created!</div>
+            <div style={{ fontSize:13, color:GRAY, lineHeight:1.6, marginBottom:20 }}>Check <b>{authEmail}</b> for a confirmation link, then come back and sign in.</div>
+            <button onClick={() => { setAuthMode("login"); setAuthError(""); setAuthPassword(""); }} style={{ padding:"12px 28px", background:BLUE, color:"white", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer" }}>Back to Sign In</button>
+          </div>
+        </div>
+      </div>
+    );
     return (
       <div style={{ minHeight:"100vh", background:"#f7f9fb", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Segoe UI', system-ui, sans-serif", padding:20 }}>
         <div style={{ width:"100%", maxWidth:380 }}>
           <div style={{ textAlign:"center", marginBottom:32 }}>
             <img src="/logo.png" alt="Buchwald" style={{ width:160, height:"auto", marginBottom:16 }} />
-            <div style={{ fontSize:18, fontWeight:700, color:DARK }}>Staff Login</div>
+            <div style={{ fontSize:18, fontWeight:700, color:DARK }}>{authMode === "signup" ? "Create Account" : "Staff Login"}</div>
             <div style={{ fontSize:13, color:GRAY, marginTop:4 }}>Buchwald Family Dentistry</div>
           </div>
           <div style={CS}>
             <label style={LS}>Email</label>
-            <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@email.com" style={IS} autoComplete="email" onKeyDown={e => e.key === "Enter" && handleLogin()} />
+            <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@email.com" style={IS} autoComplete="email" onKeyDown={e => e.key === "Enter" && (authMode === "signup" ? handleSignUp() : handleLogin())} />
             <label style={LS}>Password</label>
-            <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="••••••••" style={IS} autoComplete="current-password" onKeyDown={e => e.key === "Enter" && handleLogin()} />
+            <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder={authMode === "signup" ? "Min. 6 characters" : "••••••••"} style={IS} autoComplete={authMode === "signup" ? "new-password" : "current-password"} onKeyDown={e => e.key === "Enter" && (authMode === "signup" ? handleSignUp() : handleLogin())} />
             {authError && <div style={{ fontSize:13, color:RED, marginTop:10, padding:"8px 12px", background:"#FFF3F3", borderRadius:8 }}>{authError}</div>}
-            <button onClick={handleLogin} style={{ width:"100%", padding:16, background:BLUE, color:"white", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:"pointer", marginTop:16 }}>Sign In</button>
+            <button onClick={authMode === "signup" ? handleSignUp : handleLogin} style={{ width:"100%", padding:16, background:BLUE, color:"white", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:"pointer", marginTop:16 }}>{authMode === "signup" ? "Create Account" : "Sign In"}</button>
+          </div>
+          <div style={{ textAlign:"center", marginTop:16 }}>
+            <button onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthError(""); setAuthPassword(""); }} style={{ background:"none", border:"none", color:BLUE, fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              {authMode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
+            </button>
           </div>
         </div>
       </div>
