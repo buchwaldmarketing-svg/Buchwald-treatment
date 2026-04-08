@@ -10,6 +10,13 @@ function savePDF(elementId, filename) {
 const BLUE = "#0098D4", DARK = "#1A1A1A", GRAY = "#666", LIGHT_BLUE = "#E8F4FA", GOLD = "#B8860B", GOLD_BG = "#FFF7E0", RED = "#cc3333", GREEN = "#2d8a4e", GREEN_BG = "#e6f9ee";
 const UPGRADED_SERVICES = ["UltraCal XS","HurriSeal","Gingivectomy","Lab Fees","Core Build Up","Custom Stain Fees","Chairside Lab Fees","Membrane","Bone Graft","Nitrous","Recement Fee","iTero Scan","Surgical Isolation","Therapeutic Parenteral Drug","Root Canal Obstruction","Pulp Vitality Test","Bacterial Decontamination","Jet White Prophy","Fluoride"];
 const FINANCING_OPTIONS = [{ label: "No financing", months: 0 },{ label: "6 months 0% (CareCredit)", months: 6 },{ label: "12 months 0%", months: 12 },{ label: "18 months 0%", months: 18 },{ label: "24 months 0%", months: 24 }];
+const PLAN_TEMPLATES = [
+  { name: "Crown + Core", items: [{ name: "Crown", fee: "", teeth: [], priority: "high", customRisk: "" }, { name: "Core Build Up", fee: "", teeth: [], priority: "high", customRisk: "" }] },
+  { name: "Crown + RCT", items: [{ name: "Root Canal", fee: "", teeth: [], priority: "urgent", customRisk: "" }, { name: "Crown", fee: "", teeth: [], priority: "high", customRisk: "" }] },
+  { name: "2x Filling", items: [{ name: "Composite Filling", fee: "", teeth: [], priority: "moderate", customRisk: "" }, { name: "Composite Filling", fee: "", teeth: [], priority: "moderate", customRisk: "" }] },
+  { name: "Implant + Crown", items: [{ name: "Implant", fee: "", teeth: [], priority: "high", customRisk: "" }, { name: "Implant Crown", fee: "", teeth: [], priority: "high", customRisk: "" }] },
+  { name: "Deep Clean", items: [{ name: "Scaling & Root Planning", fee: "", teeth: [], priority: "high", customRisk: "" }, { name: "Bacterial Decontamination", fee: "", teeth: [], priority: "high", customRisk: "" }] },
+];
 const WARRANTY_TREATMENTS = ["Crowns","Composite Fillings","Implants","Orthodontics","Preventive Resin Restoration","Scaling & Root Planning","Bridges","Veneers"];
 const PRIORITY_LEVELS = [
   { value: "urgent", label: "Urgent", color: "#cc3333", bg: "#FFF3F3", icon: "\u{1F534}" },
@@ -144,6 +151,17 @@ export default function TreatmentPlan() {
     syncFromSupabase();
   }, []);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   // Treatment plan
   const [patientName, setPatientName] = useState("");
   const [patientEmail, setPatientEmail] = useState("");
@@ -185,6 +203,15 @@ export default function TreatmentPlan() {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [search, setSearch] = useState(""); const [newNote, setNewNote] = useState("");
+  const [savedTreatmentId, setSavedTreatmentId] = useState(null);
+  const [pipelineFilter, setPipelineFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  // Auth
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
 
   // Calcs
   const subtotal = treatments.reduce((s, t) => s + (parseFloat(t.fee) || 0), 0);
@@ -214,7 +241,7 @@ export default function TreatmentPlan() {
   const wAllTreatments = wItems.map(i => i.teeth.length > 0 ? i.name + " (#" + i.teeth.join(", #") + ")" : i.name).join(", ");
   const wFormComplete = wName && wItems.length > 0;
 
-  const resetForm = () => { setPatientName(""); setPatientEmail(""); setPatientPhone(""); setTreatments([{id:1,teeth:[],name:"",fee:"",priority:"moderate",customRisk:""}]); setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]); setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null); setShowPreview(false); setCollectSignatures(false); setSigStep("patient"); setSavedToProfile(false); setPushWarranty(true); setEmailSent(false); setDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
+  const resetForm = () => { setPatientName(""); setPatientEmail(""); setPatientPhone(""); setTreatments([{id:1,teeth:[],name:"",fee:"",priority:"moderate",customRisk:""}]); setInsuranceCoverage(""); setFinancing(0); setSameDayDiscount(false); setInOfficePlan(false); setSelectedUpgrades([]); setPatientSig(null); setCoordinatorSig(null); setPatientSig2(null); setShowPreview(false); setCollectSignatures(false); setSigStep("patient"); setSavedToProfile(false); setSavedTreatmentId(null); setPushWarranty(true); setEmailSent(false); setDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
   const resetWarranty = () => { setWName(""); setWItems([]); setWCustom(""); setWChoice("agree"); setWSig(null); setWPreview(false); setWCollectSig(false); setWDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); };
   const resetReceipt = () => { setRcptName(""); setRcptEmail(""); setRcptPhone(""); setRcptItems([{id:1,desc:"",amount:""}]); setRcptPayMethod("debit"); setRcptDate(new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})); setRcptDiscount(""); setRcptInsurance(""); setRcptShowPreview(false); setRcptNote(""); setRcptCCSurcharge(false); };
 
@@ -226,11 +253,13 @@ export default function TreatmentPlan() {
     if (patientEmail) patient.email = patientEmail;
     if (patientPhone) patient.phone = patientPhone;
     db_savePatient(patient);
-    const treatment = { id: crypto.randomUUID(), patient_id: patient.id, type: recordType, cost: details.total || 0, status: "presented", summary: details.summary, items: details.items || [], created_at: new Date().toISOString() };
+    const tId = crypto.randomUUID();
+    const treatment = { id: tId, patient_id: patient.id, type: recordType, cost: details.total || 0, status: "presented", summary: details.summary, items: details.items || [], created_at: new Date().toISOString() };
     db_saveTreatment(treatment);
     // Supabase sync (fire and forget)
     supabase.from("profiles").upsert({ ...patient, updated_at: new Date().toISOString() }).catch(() => {});
     supabase.from("pending_treatments").upsert(treatment).catch(() => {});
+    setSavedTreatmentId(tId);
     setSavedToProfile(true);
   };
 
@@ -252,6 +281,42 @@ export default function TreatmentPlan() {
     b += "\n---\nBuchwald Family Dentistry & Orthodontics\nbuchwaldfamilydentistry.com\n";
     return b;
   };
+
+  // ===========================
+  // AUTH SCREENS
+  // ===========================
+  if (authLoading) return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#f7f9fb" }}>
+      <div style={{ fontSize:14, color:GRAY }}>Loading...</div>
+    </div>
+  );
+
+  if (!user) {
+    const handleLogin = async () => {
+      setAuthError("");
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) setAuthError("Invalid email or password.");
+    };
+    return (
+      <div style={{ minHeight:"100vh", background:"#f7f9fb", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Segoe UI', system-ui, sans-serif", padding:20 }}>
+        <div style={{ width:"100%", maxWidth:380 }}>
+          <div style={{ textAlign:"center", marginBottom:32 }}>
+            <img src="/logo.png" alt="Buchwald" style={{ width:160, height:"auto", marginBottom:16 }} />
+            <div style={{ fontSize:18, fontWeight:700, color:DARK }}>Staff Login</div>
+            <div style={{ fontSize:13, color:GRAY, marginTop:4 }}>Buchwald Family Dentistry</div>
+          </div>
+          <div style={CS}>
+            <label style={LS}>Email</label>
+            <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@email.com" style={IS} autoComplete="email" onKeyDown={e => e.key === "Enter" && handleLogin()} />
+            <label style={LS}>Password</label>
+            <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="••••••••" style={IS} autoComplete="current-password" onKeyDown={e => e.key === "Enter" && handleLogin()} />
+            {authError && <div style={{ fontSize:13, color:RED, marginTop:10, padding:"8px 12px", background:"#FFF3F3", borderRadius:8 }}>{authError}</div>}
+            <button onClick={handleLogin} style={{ width:"100%", padding:16, background:BLUE, color:"white", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:"pointer", marginTop:16 }}>Sign In</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ===========================
   // PATIENT DETAIL VIEW
@@ -509,36 +574,46 @@ export default function TreatmentPlan() {
     const allTreatments = db_getAllTreatments();
     const tpCount = allTreatments.filter(t => t.type === "Treatment Plan").length;
     const todayCount = patients.filter(p => new Date(p.created_at).toDateString() === today).length;
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const presentedAmount = allTreatments.filter(t => t.status === "presented" && t.cost > 0).reduce((s, t) => s + (parseFloat(t.cost) || 0), 0);
+    const signedAmount = allTreatments.filter(t => t.status === "signed" && t.cost > 0).reduce((s, t) => s + (parseFloat(t.cost) || 0), 0);
+    const paidAmount = allTreatments.filter(t => t.status === "paid" && t.cost > 0).reduce((s, t) => s + (parseFloat(t.cost) || 0), 0);
+    const overdueCount = allTreatments.filter(t => t.status === "presented" && new Date(t.created_at).getTime() < sevenDaysAgo).length;
 
     return (
       <div style={{ minHeight:"100vh", background:"#f7f9fb", fontFamily:"'Segoe UI', system-ui, sans-serif" }}>
         <style>{`@media print { body { display: none; } }`}</style>
-        <div style={{ background:BLUE, padding:"14px 20px", display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:34, height:34, background:"white", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}><img src="/logo.png" alt="" style={{ width:30, height:"auto" }} /></div>
-          <div><div style={{ color:"white", fontSize:15, fontWeight:700 }}>Buchwald Family Dentistry</div><div style={{ color:"rgba(255,255,255,0.65)", fontSize:11 }}>Staff Hub</div></div>
+        <div style={{ background:BLUE, padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ width:34, height:34, background:"white", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}><img src="/logo.png" alt="" style={{ width:30, height:"auto" }} /></div>
+            <div><div style={{ color:"white", fontSize:15, fontWeight:700 }}>Buchwald Family Dentistry</div><div style={{ color:"rgba(255,255,255,0.65)", fontSize:11 }}>Staff Hub</div></div>
+          </div>
+          <button onClick={() => supabase.auth.signOut()} style={{ background:"rgba(255,255,255,0.15)", color:"white", border:"1px solid rgba(255,255,255,0.3)", borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>Logout</button>
         </div>
         <div style={{ background:"white", borderBottom:"1px solid #e8e8e8", display:"flex" }}>
-          {[["home","\u{1F3E0}","Home"],["records","\u{1F4C1}","Patients"],["members","\u2B50","In-Office Plan"]].map(([t,i,l]) => <button key={t} onClick={() => setHubTab(t)} style={{ flex:1, padding:"12px 4px", background:"none", border:"none", borderBottom:hubTab===t?`3px solid ${BLUE}`:"3px solid transparent", color:hubTab===t?BLUE:GRAY, fontSize:11, fontWeight:hubTab===t?700:400, cursor:"pointer" }}>{i} {l}</button>)}
+          {[["home","\u{1F3E0}","Home"],["pipeline","\u{1F4CA}","Pipeline"],["records","\u{1F4C1}","Patients"],["members","\u2B50","Plan"]].map(([t,i,l]) => <button key={t} onClick={() => setHubTab(t)} style={{ flex:1, padding:"12px 4px", background:"none", border:"none", borderBottom:hubTab===t?`3px solid ${BLUE}`:"3px solid transparent", color:hubTab===t?BLUE:GRAY, fontSize:10, fontWeight:hubTab===t?700:400, cursor:"pointer" }}>{i} {l}</button>)}
         </div>
         <div style={{ padding:16, maxWidth:480, margin:"0 auto" }}>
           {hubTab === "home" && (<>
-            {/* CLICKABLE STATS */}
+            {/* Outstanding alert */}
+            {overdueCount > 0 && <div onClick={() => { setHubTab("pipeline"); setPipelineFilter("presented"); }} style={{ background:"#FFF3F3", border:`1.5px solid ${RED}`, borderRadius:12, padding:"14px 16px", marginBottom:14, cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}><div><div style={{ fontSize:13, fontWeight:700, color:RED }}>{overdueCount} plan{overdueCount > 1 ? "s" : ""} presented but not signed in 7+ days</div><div style={{ fontSize:11, color:GRAY, marginTop:2 }}>Tap to view and follow up</div></div><div style={{ fontSize:18, color:RED }}>{"\u2192"}</div></div>}
+
+            {/* Revenue pipeline */}
+            <div style={{ fontSize:12, fontWeight:700, color:GRAY, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Revenue Pipeline</div>
+            <div style={{ background:"white", borderRadius:12, boxShadow:"0 1px 3px rgba(0,0,0,0.07)", overflow:"hidden", marginBottom:16 }}>
+              {[["Presented", presentedAmount, BLUE, LIGHT_BLUE],["Signed", signedAmount, GOLD, GOLD_BG],["Collected", paidAmount, GREEN, GREEN_BG]].map(([label, amount, color, bg], idx, arr) => (
+                <div key={label} onClick={() => { setHubTab("pipeline"); setPipelineFilter(label.toLowerCase()); }} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 16px", borderBottom:idx < arr.length - 1 ? "1px solid #f0f0f0" : "none", cursor:"pointer" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}><div style={{ width:10, height:10, borderRadius:5, background:color }} /><span style={{ fontSize:13, fontWeight:600, color:DARK }}>{label}</span></div>
+                  <div style={{ fontSize:16, fontWeight:800, color }}>${amount.toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 })}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Stats grid */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
               <div onClick={() => setHubTab("members")} style={{ background:"white", borderRadius:12, padding:"16px 14px", boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", borderLeft:`4px solid ${GOLD}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><span style={{ fontSize:28, fontWeight:800, color:DARK }}>{members.length}</span><span style={{ fontSize:22 }}>{"\u2B50"}</span></div>
-                <div style={{ fontSize:12, fontWeight:600, color:GRAY, marginTop:4 }}>In-Office Plan Members</div>
-                <div style={{ fontSize:10, color:"#999", marginTop:2 }}>2 cleanings/yr coverage</div>
-              </div>
-              <div onClick={() => setHubTab("records")} style={{ background:"white", borderRadius:12, padding:"16px 14px", boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", borderLeft:`4px solid ${BLUE}` }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><span style={{ fontSize:28, fontWeight:800, color:DARK }}>{tpCount}</span><span style={{ fontSize:22 }}>{"\u{1F4CB}"}</span></div>
-                <div style={{ fontSize:12, fontWeight:600, color:GRAY, marginTop:4 }}>Treatment Plans</div>
-                <div style={{ fontSize:10, color:"#999", marginTop:2 }}>All time</div>
-              </div>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-              <div onClick={() => setHubTab("records")} style={{ background:"white", borderRadius:12, padding:"16px 14px", boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", borderLeft:`4px solid ${GREEN}` }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><span style={{ fontSize:28, fontWeight:800, color:DARK }}>{todayCount}</span><span style={{ fontSize:22 }}>{"\u{1F4C5}"}</span></div>
-                <div style={{ fontSize:12, fontWeight:600, color:GRAY, marginTop:4 }}>Added Today</div>
+                <div style={{ fontSize:12, fontWeight:600, color:GRAY, marginTop:4 }}>Plan Members</div>
               </div>
               <div onClick={() => setHubTab("records")} style={{ background:"white", borderRadius:12, padding:"16px 14px", boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", borderLeft:`4px solid #8B5CF6` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}><span style={{ fontSize:28, fontWeight:800, color:DARK }}>{patients.length}</span><span style={{ fontSize:22 }}>{"\u{1F465}"}</span></div>
@@ -556,12 +631,47 @@ export default function TreatmentPlan() {
             {patients.length > 0 && (<><div style={{ fontSize:12, fontWeight:700, color:GRAY, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>Recent Patients</div><div style={{ background:"white", borderRadius:12, boxShadow:"0 1px 3px rgba(0,0,0,0.07)", overflow:"hidden" }}>{patients.slice(0,5).map((p,i) => <div key={p.id} onClick={() => setSelectedPatient(p)} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderBottom:i<4?"1px solid #f0f0f0":"none", cursor:"pointer" }}><div><span style={{ fontSize:13, fontWeight:600, color:DARK }}>{p.first_name} {p.last_name}</span>{p.plan_status==="active"&&<span style={{ background:GREEN_BG, color:GREEN, fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:10, marginLeft:8 }}>Plan</span>}</div><span style={{ fontSize:11, color:GRAY }}>{timeAgo(p.created_at)}</span></div>)}</div></>)}
           </>)}
 
-          {hubTab === "records" && (<>
-            <div style={{ fontSize:15, fontWeight:700, color:DARK, marginBottom:12 }}>All Patients <span style={{ color:BLUE }}>({patients.length})</span></div>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, email, phone..." style={{ width:"100%", padding:"11px 14px", border:"1.5px solid #e0e0e0", borderRadius:10, fontSize:15, marginBottom:12, boxSizing:"border-box" }} />
-            {filtered.map(p => <div key={p.id} onClick={() => setSelectedPatient(p)} style={{ background:"white", borderRadius:12, padding:"14px 16px", marginBottom:10, boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}><div><div style={{ fontSize:15, fontWeight:700, color:DARK }}>{p.first_name} {p.last_name}</div>{p.phone && <div style={{ fontSize:12, color:GRAY, marginTop:2 }}>{p.phone}</div>}{p.email && <div style={{ fontSize:12, color:GRAY }}>{p.email}</div>}</div><div style={{ display:"flex", gap:6 }}>{p.plan_status === "active" && <div style={{ background:GREEN_BG, color:GREEN, fontSize:10, fontWeight:700, padding:"4px 8px", borderRadius:20 }}>Plan</div>}</div></div>)}
-            {filtered.length === 0 && <div style={{ textAlign:"center", color:GRAY, padding:20, fontSize:13 }}>No patients found</div>}
-          </>)}
+          {hubTab === "pipeline" && (() => {
+            const allPts = db_getPatients();
+            const getPtName = pid => { const p = allPts.find(x => x.id === pid); return p ? `${p.first_name} ${p.last_name}` : "Unknown"; };
+            const pipelineTreatments = allTreatments.filter(t => t.cost > 0 && (pipelineFilter === "all" || t.status === pipelineFilter));
+            const statusMeta = { presented:{ label:"Presented", color:BLUE, bg:LIGHT_BLUE }, signed:{ label:"Signed", color:GOLD, bg:GOLD_BG }, paid:{ label:"Collected", color:GREEN, bg:GREEN_BG }, pending:{ label:"Pending", color:GRAY, bg:"#f0f0f0" } };
+            return (<>
+              <div style={{ display:"flex", gap:8, marginBottom:14, overflowX:"auto", paddingBottom:4 }}>
+                {[["all","All"],["presented","Presented"],["signed","Signed"],["paid","Collected"]].map(([v,l]) => <button key={v} onClick={() => setPipelineFilter(v)} style={{ padding:"7px 14px", borderRadius:20, border:`1.5px solid ${pipelineFilter===v?BLUE:"#ddd"}`, background:pipelineFilter===v?BLUE:"white", color:pipelineFilter===v?"white":GRAY, fontSize:13, fontWeight:pipelineFilter===v?700:400, cursor:"pointer", whiteSpace:"nowrap" }}>{l}</button>)}
+              </div>
+              {pipelineTreatments.length === 0 && <div style={{ textAlign:"center", color:GRAY, padding:32, fontSize:13 }}>No records found.</div>}
+              {pipelineTreatments.map(t => { const sm = statusMeta[t.status] || statusMeta.pending; const isOverdue = t.status === "presented" && new Date(t.created_at).getTime() < sevenDaysAgo; return (
+                <div key={t.id} onClick={() => { const p = allPts.find(x => x.id === t.patient_id); if (p) setSelectedPatient(p); }} style={{ background:"white", borderRadius:12, padding:"14px 16px", marginBottom:10, boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", borderLeft:`4px solid ${isOverdue ? RED : sm.color}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:DARK }}>{getPtName(t.patient_id)}</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:sm.color }}>${parseFloat(t.cost).toFixed(2)}</div>
+                  </div>
+                  <div style={{ fontSize:12, color:GRAY, marginBottom:6 }}>{t.type}{t.summary ? ` — ${t.summary.split("|")[0].trim()}` : ""}</div>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ background:isOverdue?"#FFF3F3":sm.bg, color:isOverdue?RED:sm.color, fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:10 }}>{isOverdue ? "Overdue" : sm.label}</span>
+                    <span style={{ fontSize:11, color:GRAY }}>{fmtDate(t.created_at)}</span>
+                  </div>
+                </div>
+              ); })}
+            </>);
+          })()}
+
+          {hubTab === "records" && (() => {
+            const statusFilteredPatients = statusFilter === "all" ? filtered : filtered.filter(p => {
+              const pts = db_getTreatments(p.id);
+              return pts.some(t => t.status === statusFilter);
+            });
+            return (<>
+              <div style={{ fontSize:15, fontWeight:700, color:DARK, marginBottom:12 }}>All Patients <span style={{ color:BLUE }}>({patients.length})</span></div>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, email, phone..." style={{ width:"100%", padding:"11px 14px", border:"1.5px solid #e0e0e0", borderRadius:10, fontSize:15, marginBottom:10, boxSizing:"border-box" }} />
+              <div style={{ display:"flex", gap:6, marginBottom:12, overflowX:"auto", paddingBottom:2 }}>
+                {[["all","All"],["presented","Presented"],["signed","Signed"],["paid","Paid"]].map(([v,l]) => <button key={v} onClick={() => setStatusFilter(v)} style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${statusFilter===v?BLUE:"#ddd"}`, background:statusFilter===v?BLUE:"white", color:statusFilter===v?"white":GRAY, fontSize:12, fontWeight:statusFilter===v?700:400, cursor:"pointer", whiteSpace:"nowrap" }}>{l}</button>)}
+              </div>
+              {statusFilteredPatients.map(p => <div key={p.id} onClick={() => setSelectedPatient(p)} style={{ background:"white", borderRadius:12, padding:"14px 16px", marginBottom:10, boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}><div><div style={{ fontSize:15, fontWeight:700, color:DARK }}>{p.first_name} {p.last_name}</div>{p.phone && <div style={{ fontSize:12, color:GRAY, marginTop:2 }}>{p.phone}</div>}{p.email && <div style={{ fontSize:12, color:GRAY }}>{p.email}</div>}</div><div style={{ display:"flex", gap:6 }}>{p.plan_status === "active" && <div style={{ background:GREEN_BG, color:GREEN, fontSize:10, fontWeight:700, padding:"4px 8px", borderRadius:20 }}>Plan</div>}</div></div>)}
+              {statusFilteredPatients.length === 0 && <div style={{ textAlign:"center", color:GRAY, padding:20, fontSize:13 }}>No patients found</div>}
+            </>);
+          })()}
 
           {hubTab === "members" && (<>
             <div style={{ fontSize:15, fontWeight:700, color:DARK, marginBottom:4 }}>In-Office Plan Members <span style={{ color:BLUE }}>({members.length})</span></div>
@@ -662,7 +772,7 @@ export default function TreatmentPlan() {
         <div style={{ textAlign:"center", marginBottom:20 }}><div style={{ fontSize:11, fontWeight:700, color:BLUE, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Step {sigStep==="patient"?"1/3":sigStep==="coordinator"?"2/3":"3/3"}</div><div style={{ fontSize:18, fontWeight:700, color:DARK }}>{cfg.label}</div><div style={{ fontSize:13, color:GRAY, marginTop:4 }}>{cfg.sub}</div></div>
         <div style={{ background:"#f7f9fb", borderRadius:10, padding:"12px 14px", marginBottom:20, fontSize:13 }}><div><b>Patient:</b> {patientName}</div><div><b>Treatment:</b> {treatmentDisplay}</div><div><b>Debit:</b> ${totalDebit.toFixed(2)}</div></div>
         <SignaturePad key={sigStep} label="Sign here" onSave={d => { if(sigStep==="patient") setPatientSig(d); else if(sigStep==="coordinator") setCoordinatorSig(d); else setPatientSig2(d); }} onClear={() => { if(sigStep==="patient") setPatientSig(null); else if(sigStep==="coordinator") setCoordinatorSig(null); else setPatientSig2(null); }} />
-        <button onClick={() => { if(cfg.next) setSigStep(cfg.next); else { setCollectSignatures(false); setShowPreview(true); } }} disabled={!cur} style={{ width:"100%", padding:16, border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:cur?"pointer":"not-allowed", background:cur?BLUE:"#ccc", color:"white" }}>{cfg.next?"Next \u2192":"View Treatment Plan"}</button>
+        <button onClick={() => { if(cfg.next) { setSigStep(cfg.next); } else { if (savedTreatmentId) { db_updateTreatmentStatus(savedTreatmentId, "signed"); supabase.from("pending_treatments").update({ status: "signed" }).eq("id", savedTreatmentId).catch(() => {}); } setCollectSignatures(false); setShowPreview(true); } }} disabled={!cur} style={{ width:"100%", padding:16, border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:cur?"pointer":"not-allowed", background:cur?BLUE:"#ccc", color:"white" }}>{cfg.next?"Next \u2192":"View Treatment Plan"}</button>
       </div></div>
     </div>);
   }
@@ -680,6 +790,12 @@ export default function TreatmentPlan() {
           <label style={LS}>Email <span style={{ fontWeight:400, color:"#999" }}>(for emailing copy)</span></label><input type="email" value={patientEmail} onChange={e => setPatientEmail(e.target.value)} placeholder="patient@email.com" style={IS} />
           <label style={LS}>Phone <span style={{ fontWeight:400, color:"#999" }}>(optional)</span></label><input type="tel" value={patientPhone} onChange={e => setPatientPhone(e.target.value)} placeholder="(555) 123-4567" style={IS} />
           <label style={LS}>Date</label><input type="text" value={date} onChange={e => setDate(e.target.value)} style={IS} />
+        </div>
+        <div style={CS}>
+          <div style={SL}>Quick Templates</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:10, marginBottom:4 }}>
+            {PLAN_TEMPLATES.map(tmpl => <button key={tmpl.name} onClick={() => setTreatments(tmpl.items.map((it, i) => ({ ...it, id: Date.now() + i })))} style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${BLUE}`, background:LIGHT_BLUE, color:BLUE, fontSize:13, fontWeight:600, cursor:"pointer" }}>{tmpl.name}</button>)}
+          </div>
         </div>
         <div style={CS}><div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}><div style={SL}>Treatments</div><button onClick={addTreatment} style={{ background:LIGHT_BLUE, color:BLUE, border:`1.5px solid ${BLUE}`, borderRadius:8, padding:"6px 12px", fontSize:13, fontWeight:700, cursor:"pointer" }}>+ Add</button></div>
           {treatments.map((t, idx) => <div key={t.id} style={{ background:"#f7f9fb", borderRadius:10, padding:"12px 14px", marginBottom:10, position:"relative" }}>
