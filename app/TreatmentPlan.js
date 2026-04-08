@@ -2,16 +2,26 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
+const PDF_OPTS = {
+  margin: [0.4, 0.5],
+  image: { type: "jpeg", quality: 0.97 },
+  html2canvas: { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0 },
+  jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+  pagebreak: { mode: ["css", "legacy"] },
+};
+
 function savePDF(elementId, filename) {
   if (!window.html2pdf) { alert("PDF library loading, try again in a moment."); return; }
-  window.html2pdf().set({ margin: [0.4, 0.5], filename, image: { type: "jpeg", quality: 0.97 }, html2canvas: { scale: 2, useCORS: true, logging: false }, jsPDF: { unit: "in", format: "letter", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"] } }).from(document.getElementById(elementId)).save();
+  window.scrollTo(0, 0);
+  window.html2pdf().set({ ...PDF_OPTS, filename }).from(document.getElementById(elementId)).save();
 }
 
 async function sharePDF(elementId, filename) {
   if (!window.html2pdf) { alert("PDF library loading, try again in a moment."); return; }
   try {
+    window.scrollTo(0, 0);
     const el = document.getElementById(elementId);
-    const blob = await window.html2pdf().set({ margin: [0.4, 0.5], filename, image: { type: "jpeg", quality: 0.97 }, html2canvas: { scale: 2, useCORS: true, logging: false }, jsPDF: { unit: "in", format: "letter", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"] } }).from(el).output("blob");
+    const blob = await window.html2pdf().set({ ...PDF_OPTS, filename }).from(el).output("blob");
     const file = new File([blob], filename, { type: "application/pdf" });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: filename });
@@ -76,6 +86,7 @@ function db_findPatient(fn, ln) { return db_getPatients().find(p => p.first_name
 function db_getTreatments(pid) { return db_load("treatments", []).filter(t => t.patient_id === pid).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); }
 function db_saveTreatment(t) { const all = db_load("treatments", []); all.unshift({ ...t, id: t.id || crypto.randomUUID(), created_at: new Date().toISOString() }); db_save("treatments", all); }
 function db_updateTreatmentStatus(id, status) { const all = db_load("treatments", []); const idx = all.findIndex(t => t.id === id); if (idx >= 0) { all[idx].status = status; db_save("treatments", all); } }
+function db_deleteTreatment(id) { db_save("treatments", db_load("treatments", []).filter(t => t.id !== id)); }
 function db_getNotes(pid) { return db_load("notes", []).filter(n => n.patient_id === pid).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); }
 function db_saveNote(pid, note) { const all = db_load("notes", []); all.unshift({ id: crypto.randomUUID(), patient_id: pid, note, created_at: new Date().toISOString() }); db_save("notes", all); }
 function db_getAllTreatments() { return db_load("treatments", []); }
@@ -230,6 +241,7 @@ export default function TreatmentPlan() {
   const [hubTab, setHubTab] = useState("home");
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDeleteTx, setConfirmDeleteTx] = useState(null);
   const [search, setSearch] = useState(""); const [newNote, setNewNote] = useState("");
   const [savedTreatmentId, setSavedTreatmentId] = useState(null);
   const [pipelineFilter, setPipelineFilter] = useState("all");
@@ -390,7 +402,7 @@ export default function TreatmentPlan() {
     return (
       <div style={{ minHeight:"100vh", background:"#f7f9fb", fontFamily:"'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ background:BLUE, padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <button onClick={() => { setSelectedPatient(null); setConfirmDelete(false); }} style={TB}>{"\u2190"} Back</button>
+          <button onClick={() => { setSelectedPatient(null); setConfirmDelete(false); setConfirmDeleteTx(null); }} style={TB}>{"\u2190"} Back</button>
           <div style={{ color:"white", fontSize:16, fontWeight:700 }}>{selectedPatient.first_name} {selectedPatient.last_name}</div>
           <button onClick={() => { setAppMode("treatment"); setPatientName(`${selectedPatient.first_name} ${selectedPatient.last_name}`); if (pe) setPatientEmail(pe); if (selectedPatient.phone) setPatientPhone(selectedPatient.phone); setSelectedPatient(null); }} style={TB}>+ Plan</button>
         </div>
@@ -464,7 +476,17 @@ export default function TreatmentPlan() {
                 }
                 setSelectedPatient(null);
                 setAppMode("receipt");
-              }} style={{ width:"100%", padding:"8px 12px", background:"white", color:GREEN, border:`1.5px solid ${GREEN}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>{"\u{1F9FE}"} Send Receipt</button>
+              }} style={{ width:"100%", padding:"8px 12px", background:"white", color:GREEN, border:`1.5px solid ${GREEN}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:6 }}>{"\u{1F9FE}"} Send Receipt</button>
+              {confirmDeleteTx === t.id
+                ? <div style={{ background:"#FFF3F3", border:`1.5px solid ${RED}`, borderRadius:8, padding:"10px 12px" }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:RED, marginBottom:6 }}>Delete this treatment record?</div>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={() => setConfirmDeleteTx(null)} style={{ flex:1, padding:"8px 0", background:"#f0f0f0", border:"none", borderRadius:6, fontSize:13, cursor:"pointer" }}>Cancel</button>
+                      <button onClick={() => { db_deleteTreatment(t.id); supabase.from("pending_treatments").delete().eq("id", t.id).catch(() => {}); setConfirmDeleteTx(null); setForceRefresh(p=>p+1); showToast("Treatment deleted."); }} style={{ flex:1, padding:"8px 0", background:RED, color:"white", border:"none", borderRadius:6, fontSize:13, fontWeight:700, cursor:"pointer" }}>Delete</button>
+                    </div>
+                  </div>
+                : <button onClick={() => setConfirmDeleteTx(t.id)} style={{ width:"100%", padding:"7px 12px", background:"white", color:RED, border:`1px solid ${RED}`, borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer" }}>Delete Record</button>
+              }
             </div>; })}
           </div>
 
@@ -484,7 +506,7 @@ export default function TreatmentPlan() {
                   <div style={{ fontSize:12, color:GRAY, marginBottom:12 }}>This will permanently remove their profile, all treatment records, notes, and cleaning history.</div>
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={() => setConfirmDelete(false)} style={{ flex:1, padding:12, background:"#f0f0f0", border:"none", borderRadius:8, fontSize:14, cursor:"pointer" }}>Cancel</button>
-                    <button onClick={() => { db_deletePatient(selectedPatient.id); supabase.from("profiles").delete().eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient(null); setConfirmDelete(false); setForceRefresh(p=>p+1); showToast("Patient deleted."); }} style={{ flex:1, padding:12, background:RED, color:"white", border:"none", borderRadius:8, fontSize:14, fontWeight:700, cursor:"pointer" }}>Delete</button>
+                    <button onClick={() => { showToast("Patient deleted."); db_deletePatient(selectedPatient.id); supabase.from("patients").delete().eq("id", selectedPatient.id).catch(() => {}); supabase.from("pending_treatments").delete().eq("patient_id", selectedPatient.id).catch(() => {}); setSelectedPatient(null); setConfirmDelete(false); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:12, background:RED, color:"white", border:"none", borderRadius:8, fontSize:14, fontWeight:700, cursor:"pointer" }}>Delete</button>
                   </div>
                 </div>
             }
@@ -502,7 +524,7 @@ export default function TreatmentPlan() {
       const rcptNum = `BFD-${Date.now().toString().slice(-8)}`;
       const rcptEmailBody = `Dear ${rcptName},\n\nThank you for your payment at Buchwald Family Dentistry.\n\nReceipt #: ${rcptNum}\nDate: ${rcptDate}\nPayment: ${rcptPayMethod}\n\nServices:\n${rcptItems.filter(i=>i.desc).map(i=>`  ${i.desc}: $${(parseFloat(i.amount)||0).toFixed(2)}`).join("\n")}${rcptCCFee>0?`\n\nCredit Card Processing Fee (3%): +$${rcptCCFee.toFixed(2)}`:""}${rcptDiscNum>0?`\nDiscount: -$${rcptDiscNum.toFixed(2)}`:""}${rcptInsNum>0?`\nInsurance Applied: -$${rcptInsNum.toFixed(2)}`:""}\n\nTotal Paid: $${rcptTotal.toFixed(2)}${rcptNote?`\n\nNote: ${rcptNote}`:""}\n\nThis receipt may be used for insurance reimbursement or tax deduction purposes.\n\nThank you for choosing Buchwald Family Dentistry!\n\n---\nDr. Max Buchwald Jr, DDS\nBuchwald Family Dentistry & Orthodontics\n300 N. Coit Rd, Ste 245, Richardson, TX 75080\n(972) 644-3280 | buchwaldfamilydentistry.com`;
       return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
-        <style>{`@page { margin: 0; } @media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
+        <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 100%; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
         <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:GREEN, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
           <button onClick={() => setRcptShowPreview(false)} style={TB}>{"\u2190"} Edit</button>
           <div style={{ display:"flex", gap:6 }}>
@@ -780,7 +802,7 @@ export default function TreatmentPlan() {
 
   if (appMode === "warranty" && wPreview) {
     return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
-      <style>{`@page { margin: 0; } @media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
+      <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 100%; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
       <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:BLUE, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
         <button onClick={() => setWPreview(false)} style={TB}>{"\u2190"} Edit</button>
         <div style={{ display:"flex", gap:6 }}>
@@ -898,7 +920,7 @@ export default function TreatmentPlan() {
   // TREATMENT PLAN PREVIEW
   // ===========================
   return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
-    <style>{`@page { margin: 0; } @media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; page-break-after: always; background: white; } .print-page:last-child { page-break-after: auto; } }`}</style>
+    <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } .print-page { width: 100%; padding: 0.5in 0.75in; margin: 0; box-shadow: none; page-break-after: always; background: white; } .print-page:last-child { page-break-after: auto; } }`}</style>
     <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:BLUE, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
       <button onClick={() => setShowPreview(false)} style={TB}>{"\u2190"} Edit</button>
       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
