@@ -198,6 +198,18 @@ export default function TreatmentPlan() {
   const [rcptShowPreview, setRcptShowPreview] = useState(false);
   const [rcptNote, setRcptNote] = useState("");
   const [rcptCCSurcharge, setRcptCCSurcharge] = useState(false);
+  // Toast
+  const [toast, setToast] = useState(null);
+  const showToast = (msg, type = "success") => { setToast({ msg, type }); };
+  useEffect(() => {
+    if (!toast) return;
+    const el = document.createElement("div");
+    el.style.cssText = `position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99999;background:${toast.type==="error"?"#cc3333":"#2d8a4e"};color:white;padding:12px 22px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.2);white-space:nowrap;pointer-events:none;font-family:'Segoe UI',system-ui,sans-serif;`;
+    el.textContent = (toast.type === "error" ? "✕  " : "✓  ") + toast.msg;
+    document.body.appendChild(el);
+    const t = setTimeout(() => { setToast(null); document.body.removeChild(el); }, 3000);
+    return () => { clearTimeout(t); if (document.body.contains(el)) document.body.removeChild(el); };
+  }, [toast]);
   // Hub
   const [hubTab, setHubTab] = useState("home");
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -378,8 +390,8 @@ export default function TreatmentPlan() {
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: isOnPlan ? 14 : 0 }}>
               <div style={SL}>{"\u2B50"} In-Office Cleaning Plan</div>
               {isOnPlan
-                ? <button onClick={() => { db_unenrollPlan(selectedPatient.id); supabase.from("profiles").update({ plan_status: "none", updated_at: new Date().toISOString() }).eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient({...selectedPatient, plan_status:"none"}); setForceRefresh(p=>p+1); }} style={{ fontSize:11, color:RED, background:"none", border:`1px solid ${RED}`, borderRadius:6, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>Remove</button>
-                : <button onClick={() => { const planStart = new Date().toISOString().split("T")[0]; db_enrollPlan(selectedPatient.id); supabase.from("profiles").update({ plan_status: "active", plan_start_date: planStart, updated_at: new Date().toISOString() }).eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient({...selectedPatient, plan_status:"active", plan_start_date: planStart}); setForceRefresh(p=>p+1); }} style={{ fontSize:12, color:"white", background:GOLD, border:"none", borderRadius:8, padding:"8px 14px", cursor:"pointer", fontWeight:700 }}>Enroll in Plan</button>
+                ? <button onClick={() => { db_unenrollPlan(selectedPatient.id); supabase.from("profiles").update({ plan_status: "none", updated_at: new Date().toISOString() }).eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient({...selectedPatient, plan_status:"none"}); setForceRefresh(p=>p+1); showToast("Removed from plan."); }} style={{ fontSize:11, color:RED, background:"none", border:`1px solid ${RED}`, borderRadius:6, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>Remove</button>
+                : <button onClick={() => { const planStart = new Date().toISOString().split("T")[0]; db_enrollPlan(selectedPatient.id); supabase.from("profiles").update({ plan_status: "active", plan_start_date: planStart, updated_at: new Date().toISOString() }).eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient({...selectedPatient, plan_status:"active", plan_start_date: planStart}); setForceRefresh(p=>p+1); showToast("Enrolled in plan."); }} style={{ fontSize:12, color:"white", background:GOLD, border:"none", borderRadius:8, padding:"8px 14px", cursor:"pointer", fontWeight:700 }}>Enroll in Plan</button>
               }
             </div>
             {isOnPlan && (<>
@@ -395,7 +407,7 @@ export default function TreatmentPlan() {
                   <div style={{ fontSize:10, color:"#999" }}>of 2 per year</div>
                 </div>
               </div>
-              <button onClick={() => { db_addCleaning(selectedPatient.id); setForceRefresh(p=>p+1); }} disabled={cleaningsLeft === 0} style={{ width:"100%", padding:12, background: cleaningsLeft > 0 ? GREEN : "#ccc", color:"white", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor: cleaningsLeft > 0 ? "pointer" : "not-allowed", marginBottom: allCleanings.length > 0 ? 12 : 0 }}>
+              <button onClick={() => { db_addCleaning(selectedPatient.id); setForceRefresh(p=>p+1); showToast("Cleaning logged."); }} disabled={cleaningsLeft === 0} style={{ width:"100%", padding:12, background: cleaningsLeft > 0 ? GREEN : "#ccc", color:"white", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor: cleaningsLeft > 0 ? "pointer" : "not-allowed", marginBottom: allCleanings.length > 0 ? 12 : 0 }}>
                 {cleaningsLeft > 0 ? "\u2713 Log Cleaning Visit" : "All 2 cleanings used this year"}
               </button>
               {allCleanings.length > 0 && (<div>
@@ -423,7 +435,7 @@ export default function TreatmentPlan() {
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}><div style={{ fontSize:14, fontWeight:700, color:DARK }}>{t.type}</div>{t.cost > 0 && <div style={{ fontSize:13, fontWeight:700, color:BLUE }}>${parseFloat(t.cost).toFixed(2)}</div>}</div>
               {t.summary && <div style={{ fontSize:12, color:GRAY, marginBottom:8, lineHeight:1.4 }}>{t.summary}</div>}
               <div style={{ fontSize:11, color:GRAY, marginBottom:8 }}>{fmtDate(t.created_at)}</div>
-              <div style={{ display:"flex", gap:6, marginBottom:8 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); supabase.from("pending_treatments").update({ status: s }).eq("id", t.id).catch(() => {}); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
+              <div style={{ display:"flex", gap:6, marginBottom:8 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); supabase.from("pending_treatments").update({ status: s }).eq("id", t.id).catch(() => {}); setForceRefresh(p=>p+1); showToast(`Status updated to ${s}.`); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
               {/* Send Receipt button */}
               <button onClick={() => {
                 setRcptName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
@@ -444,7 +456,7 @@ export default function TreatmentPlan() {
           <div style={CS}><div style={SL}>Notes</div>
             {notes.map(n => <div key={n.id} style={{ background:"#f7f9fb", borderRadius:8, padding:"10px 12px", marginBottom:8 }}><div style={{ fontSize:13 }}>{n.note}</div><div style={{ fontSize:11, color:GRAY, marginTop:4 }}>{fmtDate(n.created_at)}</div></div>)}
             <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add a note..." style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e0e0e0", borderRadius:10, fontSize:14, resize:"vertical", minHeight:80, boxSizing:"border-box", marginTop:8 }} />
-            <button onClick={() => { if (newNote.trim()) { const noteId = crypto.randomUUID(); const noteCreatedAt = new Date().toISOString(); db_saveNote(selectedPatient.id, newNote.trim()); supabase.from("patient_notes").insert({ id: noteId, patient_id: selectedPatient.id, note: newNote.trim(), created_at: noteCreatedAt }).catch(() => {}); setNewNote(""); setForceRefresh(p=>p+1); } }} disabled={!newNote.trim()} style={{ width:"100%", padding:14, background:newNote.trim()?BLUE:"#ccc", color:"white", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:newNote.trim()?"pointer":"not-allowed", marginTop:8 }}>Save Note</button>
+            <button onClick={() => { if (newNote.trim()) { const noteId = crypto.randomUUID(); const noteCreatedAt = new Date().toISOString(); db_saveNote(selectedPatient.id, newNote.trim()); supabase.from("patient_notes").insert({ id: noteId, patient_id: selectedPatient.id, note: newNote.trim(), created_at: noteCreatedAt }).catch(() => {}); setNewNote(""); setForceRefresh(p=>p+1); showToast("Note saved."); } }} disabled={!newNote.trim()} style={{ width:"100%", padding:14, background:newNote.trim()?BLUE:"#ccc", color:"white", border:"none", borderRadius:10, fontSize:15, fontWeight:700, cursor:newNote.trim()?"pointer":"not-allowed", marginTop:8 }}>Save Note</button>
           </div>
 
           {/* Delete Patient */}
@@ -456,7 +468,7 @@ export default function TreatmentPlan() {
                   <div style={{ fontSize:12, color:GRAY, marginBottom:12 }}>This will permanently remove their profile, all treatment records, notes, and cleaning history.</div>
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={() => setConfirmDelete(false)} style={{ flex:1, padding:12, background:"#f0f0f0", border:"none", borderRadius:8, fontSize:14, cursor:"pointer" }}>Cancel</button>
-                    <button onClick={() => { db_deletePatient(selectedPatient.id); supabase.from("profiles").delete().eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient(null); setConfirmDelete(false); setForceRefresh(p=>p+1); }} style={{ flex:1, padding:12, background:RED, color:"white", border:"none", borderRadius:8, fontSize:14, fontWeight:700, cursor:"pointer" }}>Delete</button>
+                    <button onClick={() => { db_deletePatient(selectedPatient.id); supabase.from("profiles").delete().eq("id", selectedPatient.id).catch(() => {}); setSelectedPatient(null); setConfirmDelete(false); setForceRefresh(p=>p+1); showToast("Patient deleted."); }} style={{ flex:1, padding:12, background:RED, color:"white", border:"none", borderRadius:8, fontSize:14, fontWeight:700, cursor:"pointer" }}>Delete</button>
                   </div>
                 </div>
             }
@@ -799,7 +811,7 @@ export default function TreatmentPlan() {
         <div style={{ textAlign:"center", marginBottom:20 }}><div style={{ fontSize:11, fontWeight:700, color:BLUE, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Step {sigStep==="patient"?"1/3":sigStep==="coordinator"?"2/3":"3/3"}</div><div style={{ fontSize:18, fontWeight:700, color:DARK }}>{cfg.label}</div><div style={{ fontSize:13, color:GRAY, marginTop:4 }}>{cfg.sub}</div></div>
         <div style={{ background:"#f7f9fb", borderRadius:10, padding:"12px 14px", marginBottom:20, fontSize:13 }}><div><b>Patient:</b> {patientName}</div><div><b>Treatment:</b> {treatmentDisplay}</div><div><b>Debit:</b> ${totalDebit.toFixed(2)}</div></div>
         <SignaturePad key={sigStep} label="Sign here" onSave={d => { if(sigStep==="patient") setPatientSig(d); else if(sigStep==="coordinator") setCoordinatorSig(d); else setPatientSig2(d); }} onClear={() => { if(sigStep==="patient") setPatientSig(null); else if(sigStep==="coordinator") setCoordinatorSig(null); else setPatientSig2(null); }} />
-        <button onClick={() => { if(cfg.next) { setSigStep(cfg.next); } else { if (savedTreatmentId) { db_updateTreatmentStatus(savedTreatmentId, "signed"); supabase.from("pending_treatments").update({ status: "signed" }).eq("id", savedTreatmentId).catch(() => {}); } setCollectSignatures(false); setShowPreview(true); } }} disabled={!cur} style={{ width:"100%", padding:16, border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:cur?"pointer":"not-allowed", background:cur?BLUE:"#ccc", color:"white" }}>{cfg.next?"Next \u2192":"View Treatment Plan"}</button>
+        <button onClick={() => { if(cfg.next) { setSigStep(cfg.next); } else { if (savedTreatmentId) { db_updateTreatmentStatus(savedTreatmentId, "signed"); supabase.from("pending_treatments").update({ status: "signed" }).eq("id", savedTreatmentId).catch(() => {}); } showToast("All signatures collected. Plan signed."); setCollectSignatures(false); setShowPreview(true); } }} disabled={!cur} style={{ width:"100%", padding:16, border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:cur?"pointer":"not-allowed", background:cur?BLUE:"#ccc", color:"white" }}>{cfg.next?"Next \u2192":"View Treatment Plan"}</button>
       </div></div>
     </div>);
   }
@@ -860,8 +872,8 @@ export default function TreatmentPlan() {
             <div><div style={{ fontSize:14, fontWeight:700, color:pushWarranty?GOLD:DARK }}>{"\u{1F6E1}\uFE0F"} Push Lifetime Warranty</div><div style={{ fontSize:11, color:pushWarranty?GOLD:GRAY, marginTop:2 }}>{pushWarranty?"Included in plan & email":"Hidden"}</div></div>
           </div>
         </div>
-        <button onClick={() => { saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", "), items: treatments.filter(t=>t.name).map(t=>({desc:t.name+(t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""), amount:(parseFloat(t.fee)||0).toFixed(2)})) }); }} disabled={!patientName.trim()} style={{ width:"100%", padding:14, background:savedToProfile?GREEN_BG:"white", color:savedToProfile?GREEN:patientName.trim()?BLUE:GRAY, border:`2px solid ${savedToProfile?GREEN:patientName.trim()?BLUE:"#ddd"}`, borderRadius:12, fontSize:15, fontWeight:700, cursor:patientName.trim()?"pointer":"not-allowed", marginBottom:10 }}>{savedToProfile?"\u2713 Saved to Profile":"\u{1F4BE} Save to Profile"}</button>
-        <button onClick={() => { if (!savedToProfile) saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", "), items: treatments.filter(t=>t.name).map(t=>({desc:t.name+(t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""), amount:(parseFloat(t.fee)||0).toFixed(2)})) }); setShowPreview(true); }} disabled={!formComplete} style={{ width:"100%", padding:16, background:formComplete?BLUE:"#ccc", color:"white", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:formComplete?"pointer":"not-allowed", marginBottom:24 }}>Generate Treatment Plan</button>
+        <button onClick={() => { try { saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", "), items: treatments.filter(t=>t.name).map(t=>({desc:t.name+(t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""), amount:(parseFloat(t.fee)||0).toFixed(2)})) }); showToast("Saved to patient profile."); } catch(e) { showToast("Error saving — try again.", "error"); } }} disabled={!patientName.trim()} style={{ width:"100%", padding:14, background:savedToProfile?GREEN_BG:"white", color:savedToProfile?GREEN:patientName.trim()?BLUE:GRAY, border:`2px solid ${savedToProfile?GREEN:patientName.trim()?BLUE:"#ddd"}`, borderRadius:12, fontSize:15, fontWeight:700, cursor:patientName.trim()?"pointer":"not-allowed", marginBottom:10 }}>{savedToProfile?"\u2713 Saved to Profile":"\u{1F4BE} Save to Profile"}</button>
+        <button onClick={() => { try { if (!savedToProfile) saveRecord("Treatment Plan", { total: totalDebit, summary: treatments.filter(t=>t.name).map(t=>`${t.name}=$${(parseFloat(t.fee)||0).toFixed(2)}`).join(", "), items: treatments.filter(t=>t.name).map(t=>({desc:t.name+(t.teeth.length>0?" (#"+t.teeth.join(", #")+")":""), amount:(parseFloat(t.fee)||0).toFixed(2)})) }); } catch(e) { showToast("Error saving record.", "error"); } setShowPreview(true); }} disabled={!formComplete} style={{ width:"100%", padding:16, background:formComplete?BLUE:"#ccc", color:"white", border:"none", borderRadius:12, fontSize:16, fontWeight:700, cursor:formComplete?"pointer":"not-allowed", marginBottom:24 }}>Generate Treatment Plan</button>
       </div>
     </div>);
   }
