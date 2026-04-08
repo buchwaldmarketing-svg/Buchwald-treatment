@@ -7,6 +7,22 @@ function savePDF(elementId, filename) {
   window.html2pdf().set({ margin: [0.4, 0.5], filename, image: { type: "jpeg", quality: 0.97 }, html2canvas: { scale: 2, useCORS: true, logging: false }, jsPDF: { unit: "in", format: "letter", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"] } }).from(document.getElementById(elementId)).save();
 }
 
+async function sharePDF(elementId, filename) {
+  if (!window.html2pdf) { alert("PDF library loading, try again in a moment."); return; }
+  try {
+    const el = document.getElementById(elementId);
+    const blob = await window.html2pdf().set({ margin: [0.4, 0.5], filename, image: { type: "jpeg", quality: 0.97 }, html2canvas: { scale: 2, useCORS: true, logging: false }, jsPDF: { unit: "in", format: "letter", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"] } }).from(el).output("blob");
+    const file = new File([blob], filename, { type: "application/pdf" });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  } catch (e) { if (e.name !== "AbortError") alert("Could not share. Try the PDF button instead."); }
+}
+
 const BLUE = "#0098D4", DARK = "#1A1A1A", GRAY = "#666", LIGHT_BLUE = "#E8F4FA", GOLD = "#B8860B", GOLD_BG = "#FFF7E0", RED = "#cc3333", GREEN = "#2d8a4e", GREEN_BG = "#e6f9ee";
 const UPGRADED_SERVICES = ["UltraCal XS","HurriSeal","Gingivectomy","Lab Fees","Core Build Up","Custom Stain Fees","Chairside Lab Fees","Membrane","Bone Graft","Nitrous","Recement Fee","iTero Scan","Surgical Isolation","Therapeutic Parenteral Drug","Root Canal Obstruction","Pulp Vitality Test","Bacterial Decontamination","Jet White Prophy","Fluoride"];
 const FINANCING_OPTIONS = [{ label: "No financing", months: 0 },{ label: "6 months 0% (CareCredit)", months: 6 },{ label: "12 months 0%", months: 12 },{ label: "18 months 0%", months: 18 },{ label: "24 months 0%", months: 24 }];
@@ -486,12 +502,12 @@ export default function TreatmentPlan() {
       const rcptNum = `BFD-${Date.now().toString().slice(-8)}`;
       const rcptEmailBody = `Dear ${rcptName},\n\nThank you for your payment at Buchwald Family Dentistry.\n\nReceipt #: ${rcptNum}\nDate: ${rcptDate}\nPayment: ${rcptPayMethod}\n\nServices:\n${rcptItems.filter(i=>i.desc).map(i=>`  ${i.desc}: $${(parseFloat(i.amount)||0).toFixed(2)}`).join("\n")}${rcptCCFee>0?`\n\nCredit Card Processing Fee (3%): +$${rcptCCFee.toFixed(2)}`:""}${rcptDiscNum>0?`\nDiscount: -$${rcptDiscNum.toFixed(2)}`:""}${rcptInsNum>0?`\nInsurance Applied: -$${rcptInsNum.toFixed(2)}`:""}\n\nTotal Paid: $${rcptTotal.toFixed(2)}${rcptNote?`\n\nNote: ${rcptNote}`:""}\n\nThis receipt may be used for insurance reimbursement or tax deduction purposes.\n\nThank you for choosing Buchwald Family Dentistry!\n\n---\nDr. Max Buchwald Jr, DDS\nBuchwald Family Dentistry & Orthodontics\n300 N. Coit Rd, Ste 245, Richardson, TX 75080\n(972) 644-3280 | buchwaldfamilydentistry.com`;
       return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
-        <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
+        <style>{`@page { margin: 0; } @media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
         <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:GREEN, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
           <button onClick={() => setRcptShowPreview(false)} style={TB}>{"\u2190"} Edit</button>
           <div style={{ display:"flex", gap:6 }}>
-            <button onClick={() => openGmail(rcptEmail, `Payment Receipt #${rcptNum} - Buchwald Family Dentistry`, rcptEmailBody)} style={TB}>{"\u2709\uFE0F"} Email</button>
-            <button onClick={() => savePDF("rcpt-pdf", `Receipt_${rcptName||"Patient"}.pdf`)} style={TB}>{"\u2B07\uFE0F"} PDF</button>
+            <button onClick={() => sharePDF("rcpt-pdf", `Receipt_${rcptName||"Patient"}.pdf`)} style={TB}>Share / Email</button>
+            <button onClick={() => savePDF("rcpt-pdf", `Receipt_${rcptName||"Patient"}.pdf`)} style={TB}>PDF</button>
             <button onClick={() => window.print()} style={{ background:"white", color:GREEN, border:"none", borderRadius:8, padding:"8px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Print</button>
           </div>
         </div>
@@ -764,12 +780,12 @@ export default function TreatmentPlan() {
 
   if (appMode === "warranty" && wPreview) {
     return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
-      <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
+      <style>{`@page { margin: 0; } @media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; } }`}</style>
       <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:BLUE, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
         <button onClick={() => setWPreview(false)} style={TB}>{"\u2190"} Edit</button>
         <div style={{ display:"flex", gap:6 }}>
           {!wSig && <button onClick={() => { setWPreview(false); setWCollectSig(true); }} style={TB}>{"\u270D\uFE0F"} Sign</button>}
-          <button onClick={() => openGmail("", `Lifetime Warranty - ${wName} - Buchwald Family Dentistry`, `Lifetime Warranty Form\n\nPatient: ${wName}\nDate: ${wDate}\n\nTreatments:\n${wItems.map(i=>`- ${i.name}${i.teeth.length>0?" (#"+i.teeth.join(", #")+")":""}`).join("\n")}\n\nElection: ${wChoice==="agree"?"Agreed":"Waived"}\n\n---\nBuchwald Family Dentistry & Orthodontics\nbuchwaldfamilydentistry.com`)} style={TB}>{"\u2709\uFE0F"} Email</button>
+          <button onClick={() => sharePDF("w-pdf", `Warranty_${wName||"Form"}.pdf`)} style={TB}>Share / Email</button>
           <button onClick={resetWarranty} style={TB}>New</button>
           <button onClick={() => savePDF("w-pdf", `Warranty_${wName||"Form"}.pdf`)} style={TB}>{"\u2B07\uFE0F"} PDF</button>
           <button onClick={() => window.print()} style={{ background:"white", color:BLUE, border:"none", borderRadius:8, padding:"8px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Print</button>
@@ -882,14 +898,14 @@ export default function TreatmentPlan() {
   // TREATMENT PLAN PREVIEW
   // ===========================
   return (<div style={{ background:"#f0f0f0", minHeight:"100vh", fontFamily:"Arial, sans-serif" }}>
-    <style>{`@media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; page-break-after: always; background: white; } .print-page:last-child { page-break-after: auto; } }`}</style>
+    <style>{`@page { margin: 0; } @media screen { .no-print { display: flex !important; } .print-page { width: 8.5in; max-width: 100%; margin: 0 auto 20px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.15); padding: 0.5in 0.75in; } } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } .print-page { width: 8.5in; padding: 0.5in 0.75in; margin: 0; box-shadow: none; page-break-after: always; background: white; } .print-page:last-child { page-break-after: auto; } }`}</style>
     <div className="no-print" style={{ display:"none", position:"sticky", top:0, zIndex:100, background:BLUE, padding:"10px 16px", justifyContent:"space-between", alignItems:"center" }}>
       <button onClick={() => setShowPreview(false)} style={TB}>{"\u2190"} Edit</button>
       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
         <button onClick={() => { setShowPreview(false); setCollectSignatures(true); setSigStep("patient"); }} style={TB}>{"\u270D\uFE0F"} Sign</button>
-        <button onClick={() => { openGmail(patientEmail, "Your Treatment Plan - Buchwald Family Dentistry", buildTPEmail()); setEmailSent(true); }} style={{ ...TB, background:emailSent?"rgba(45,138,78,0.5)":"rgba(255,255,255,0.2)" }}>{emailSent?"\u2713 Sent":"\u2709\uFE0F Email"}</button>
+        <button onClick={() => sharePDF("tp-pdf", `TreatmentPlan_${patientName||"Patient"}.pdf`)} style={TB}>Share / Email</button>
         <button onClick={resetForm} style={TB}>New</button>
-        <button onClick={() => savePDF("tp-pdf", `TreatmentPlan_${patientName||"Patient"}.pdf`)} style={TB}>{"\u2B07\uFE0F"} PDF</button>
+        <button onClick={() => savePDF("tp-pdf", `TreatmentPlan_${patientName||"Patient"}.pdf`)} style={TB}>PDF</button>
         <button onClick={() => window.print()} style={{ background:"white", color:BLUE, border:"none", borderRadius:8, padding:"8px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Print</button>
       </div>
     </div>
