@@ -145,15 +145,19 @@ export default function TreatmentPlan() {
   const [forceRefresh, setForceRefresh] = useState(0);
   useEffect(() => { if (!document.getElementById("html2pdf-script")) { const s = document.createElement("script"); s.id = "html2pdf-script"; s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"; document.head.appendChild(s); } }, []);
 
-  // Pull from Supabase on mount and merge into localStorage for cross-device sync
+  // Pull from Supabase whenever user logs in (re-runs on auth change)
   useEffect(() => {
+    if (!user) return;
     async function syncFromSupabase() {
       try {
-        const [{ data: profiles }, { data: treatments }, { data: notes }] = await Promise.all([
+        const [{ data: profiles, error: e1 }, { data: treatments, error: e2 }, { data: notes, error: e3 }] = await Promise.all([
           supabase.from("profiles").select("*"),
           supabase.from("pending_treatments").select("*"),
           supabase.from("patient_notes").select("*"),
         ]);
+        if (e1) console.error("profiles sync:", e1.message);
+        if (e2) console.error("treatments sync:", e2.message);
+        if (e3) console.error("notes sync:", e3.message);
         if (profiles && profiles.length > 0) {
           const local = db_load("patients", []);
           const merged = [...profiles];
@@ -173,10 +177,10 @@ export default function TreatmentPlan() {
           db_save("notes", merged);
         }
         setForceRefresh(p => p + 1);
-      } catch {}
+      } catch (err) { console.error("sync error:", err); }
     }
     syncFromSupabase();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
