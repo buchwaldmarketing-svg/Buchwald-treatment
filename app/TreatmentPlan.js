@@ -143,6 +143,14 @@ const TB = { background: "rgba(255,255,255,0.2)", color: "white", border: "none"
 export default function TreatmentPlan() {
   const [appMode, setAppMode] = useState(null); // null=hub, "treatment", "warranty", "receipt"
   const [forceRefresh, setForceRefresh] = useState(0);
+  // Auth (must be declared before effects that reference user)
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState("login"); // "login" | "signup"
+
   useEffect(() => { if (!document.getElementById("html2pdf-script")) { const s = document.createElement("script"); s.id = "html2pdf-script"; s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"; document.head.appendChild(s); } }, []);
 
   // Pull from Supabase whenever user logs in (re-runs on auth change)
@@ -250,13 +258,6 @@ export default function TreatmentPlan() {
   const [savedTreatmentId, setSavedTreatmentId] = useState(null);
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  // Auth
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [authMode, setAuthMode] = useState("login"); // "login" | "signup"
 
   // Calcs
   const subtotal = treatments.reduce((s, t) => s + (parseFloat(t.fee) || 0), 0);
