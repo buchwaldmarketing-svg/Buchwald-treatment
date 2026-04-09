@@ -153,41 +153,70 @@ export default function TreatmentPlan() {
 
   useEffect(() => { if (!document.getElementById("html2pdf-script")) { const s = document.createElement("script"); s.id = "html2pdf-script"; s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"; document.head.appendChild(s); } }, []);
 
-  // Pull from Supabase whenever user logs in (re-runs on auth change)
+  // Two-way sync with Supabase whenever user logs in
   useEffect(() => {
     if (!user) return;
-    async function syncFromSupabase() {
+    async function syncWithSupabase() {
       try {
-        const [{ data: profiles, error: e1 }, { data: treatments, error: e2 }, { data: notes, error: e3 }] = await Promise.all([
+        // 1. PUSH local data to Supabase first
+        const localPatients = db_load("patients", []);
+        const localTreatments = db_load("treatments", []);
+        const localNotes = db_load("notes", []);
+        const localCleanings = db_load("cleanings", []);
+        if (localPatients.length > 0) {
+          const { error } = await supabase.from("profiles").upsert(localPatients.map(p => ({ ...p, updated_at: p.updated_at || new Date().toISOString() })), { onConflict: "id" });
+          if (error) console.error("push profiles:", error.message);
+        }
+        if (localTreatments.length > 0) {
+          const { error } = await supabase.from("pending_treatments").upsert(localTreatments, { onConflict: "id" });
+          if (error) console.error("push treatments:", error.message);
+        }
+        if (localNotes.length > 0) {
+          const { error } = await supabase.from("patient_notes").upsert(localNotes, { onConflict: "id" });
+          if (error) console.error("push notes:", error.message);
+        }
+        if (localCleanings.length > 0) {
+          const { error } = await supabase.from("cleanings").upsert(localCleanings, { onConflict: "id" });
+          if (error) console.error("push cleanings:", error.message);
+        }
+
+        // 2. PULL all data from Supabase (now includes what we just pushed + other devices' data)
+        const [{ data: profiles, error: e1 }, { data: treatments, error: e2 }, { data: notes, error: e3 }, { data: cleanings, error: e4 }] = await Promise.all([
           supabase.from("profiles").select("*"),
           supabase.from("pending_treatments").select("*"),
           supabase.from("patient_notes").select("*"),
+          supabase.from("cleanings").select("*"),
         ]);
-        if (e1) console.error("profiles sync:", e1.message);
-        if (e2) console.error("treatments sync:", e2.message);
-        if (e3) console.error("notes sync:", e3.message);
-        if (profiles && profiles.length > 0) {
-          const local = db_load("patients", []);
+        if (e1) console.error("pull profiles:", e1.message);
+        if (e2) console.error("pull treatments:", e2.message);
+        if (e3) console.error("pull notes:", e3.message);
+        if (e4) console.error("pull cleanings:", e4.message);
+
+        // Merge: remote wins for conflicts (by id), keep any local-only records
+        if (profiles) {
           const merged = [...profiles];
-          local.forEach(p => { if (!merged.find(m => m.id === p.id)) merged.push(p); });
+          localPatients.forEach(p => { if (!merged.find(m => m.id === p.id)) merged.push(p); });
           db_save("patients", merged);
         }
-        if (treatments && treatments.length > 0) {
-          const local = db_load("treatments", []);
+        if (treatments) {
           const merged = [...treatments];
-          local.forEach(t => { if (!merged.find(m => m.id === t.id)) merged.push(t); });
+          localTreatments.forEach(t => { if (!merged.find(m => m.id === t.id)) merged.push(t); });
           db_save("treatments", merged);
         }
-        if (notes && notes.length > 0) {
-          const local = db_load("notes", []);
+        if (notes) {
           const merged = [...notes];
-          local.forEach(n => { if (!merged.find(m => m.id === n.id)) merged.push(n); });
+          localNotes.forEach(n => { if (!merged.find(m => m.id === n.id)) merged.push(n); });
           db_save("notes", merged);
+        }
+        if (cleanings) {
+          const merged = [...cleanings];
+          localCleanings.forEach(c => { if (!merged.find(m => m.id === c.id)) merged.push(c); });
+          db_save("cleanings", merged);
         }
         setForceRefresh(p => p + 1);
       } catch (err) { console.error("sync error:", err); }
     }
-    syncFromSupabase();
+    syncWithSupabase();
   }, [user]);
 
   useEffect(() => {
