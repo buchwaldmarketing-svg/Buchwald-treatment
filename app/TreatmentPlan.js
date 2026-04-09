@@ -499,26 +499,38 @@ export default function TreatmentPlan() {
               <div style={{ fontSize:11, color:GRAY, marginBottom:8 }}>{fmtDate(t.created_at)}</div>
               <div style={{ display:"flex", gap:6, marginBottom:8 }}>{statusFlow.map(s => { const active = t.status===s; const done = statusFlow.indexOf(t.status)>statusFlow.indexOf(s); return <button key={s} onClick={() => { db_updateTreatmentStatus(t.id, s); supabase.from("pending_treatments").update({ status: s }).eq("id", t.id).catch(() => {}); setForceRefresh(p=>p+1); showToast(`Status updated to ${s}.`); }} style={{ flex:1, padding:"6px 4px", borderRadius:8, border:`1.5px solid ${active||done?sc.text:"#ddd"}`, background:active?sc.bg:done?"#f0f0f0":"white", color:active?sc.text:GRAY, fontSize:12, fontWeight:active?700:400, cursor:"pointer" }}>{done?"\u2713 ":""}{statusLabels[s]}</button>; })}</div>
               {/* Send Copy / Send Receipt button */}
-              {t.type === "Treatment Plan" && t.status !== "paid" ? (
-                <button onClick={() => {
-                  setPatientName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
-                  if (pe) setPatientEmail(pe);
-                  if (selectedPatient.phone) setPatientPhone(selectedPatient.phone);
-                  if (t.items && t.items.length > 0) {
-                    setTreatments(t.items.map((item, idx) => {
-                      const teethMatch = item.desc.match(/\(#([\d, #]+)\)/);
-                      const teeth = teethMatch ? teethMatch[1].replace(/#/g, "").split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n)) : [];
-                      const name = item.desc.replace(/\s*\(#[\d, #]+\)/, "").trim();
-                      return { id: idx + 1, teeth, name, fee: item.amount, priority: "moderate", customRisk: "" };
-                    }));
-                  }
-                  setSavedTreatmentId(t.id);
-                  setSavedToProfile(true);
-                  setSelectedPatient(null);
-                  setShowPreview(true);
-                  setAppMode("treatment");
-                }} style={{ width:"100%", padding:"8px 12px", background:"white", color:BLUE, border:`1.5px solid ${BLUE}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", marginBottom:6 }}>{"\u{1F4CB}"} View Treatment Plan</button>
-              ) : (
+              {t.type === "Treatment Plan" && t.status !== "paid" ? (<>
+                <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                  <button onClick={() => {
+                    setPatientName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
+                    if (pe) setPatientEmail(pe);
+                    if (selectedPatient.phone) setPatientPhone(selectedPatient.phone);
+                    if (t.items && t.items.length > 0) {
+                      setTreatments(t.items.map((item, idx) => {
+                        const teethMatch = item.desc.match(/\(#([\d, #]+)\)/);
+                        const teeth = teethMatch ? teethMatch[1].replace(/#/g, "").split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n)) : [];
+                        const name = item.desc.replace(/\s*\(#[\d, #]+\)/, "").trim();
+                        return { id: idx + 1, teeth, name, fee: item.amount, priority: "moderate", customRisk: "" };
+                      }));
+                    }
+                    setSavedTreatmentId(t.id);
+                    setSavedToProfile(true);
+                    setSelectedPatient(null);
+                    setShowPreview(true);
+                    setAppMode("treatment");
+                  }} style={{ flex:1, padding:"8px 12px", background:"white", color:BLUE, border:`1.5px solid ${BLUE}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>{"\u{1F4CB}"} View Plan</button>
+                  <button onClick={() => {
+                    setRcptName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
+                    if (pe) setRcptEmail(pe);
+                    if (selectedPatient.phone) setRcptPhone(selectedPatient.phone);
+                    if (t.items && t.items.length > 0) {
+                      setRcptItems(t.items.map((item, idx) => ({ id: idx + 1, desc: item.desc, amount: item.amount })));
+                    }
+                    setSelectedPatient(null);
+                    setAppMode("receipt");
+                  }} style={{ flex:1, padding:"8px 12px", background:"white", color:GREEN, border:`1.5px solid ${GREEN}`, borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>{"\u{1F9FE}"} Receipt</button>
+                </div>
+              </>) : (
                 <button onClick={() => {
                   setRcptName(`${selectedPatient.first_name} ${selectedPatient.last_name}`);
                   if (pe) setRcptEmail(pe);
@@ -981,6 +993,21 @@ export default function TreatmentPlan() {
       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
         <button onClick={() => { setShowPreview(false); setCollectSignatures(true); setSigStep("patient"); }} style={TB}>{"\u270D\uFE0F"} Sign</button>
         <button onClick={() => sharePDF("tp-pdf", `TreatmentPlan_${patientName||"Patient"}.pdf`)} style={TB}>Share / Email</button>
+        <button onClick={() => {
+          setRcptName(patientName);
+          setRcptEmail(patientEmail);
+          setRcptPhone(patientPhone);
+          setRcptItems(treatments.filter(t => t.name).map((t, idx) => ({
+            id: idx + 1,
+            desc: t.name + (t.teeth.length > 0 ? " (#" + t.teeth.join(", #") + ")" : ""),
+            amount: (parseFloat(t.fee) || 0).toFixed(2)
+          })));
+          setRcptDate(date);
+          if (sameDayDiscount || inOfficePlan) setRcptDiscount(discountAmount.toFixed(2));
+          if (insuranceNum > 0) setRcptInsurance(insuranceCoverage);
+          setShowPreview(false);
+          setAppMode("receipt");
+        }} style={TB}>{"\u{1F9FE}"} Receipt</button>
         <button onClick={resetForm} style={TB}>New</button>
         <button onClick={() => savePDF("tp-pdf", `TreatmentPlan_${patientName||"Patient"}.pdf`)} style={TB}>PDF</button>
         <button onClick={() => window.print()} style={{ background:"white", color:BLUE, border:"none", borderRadius:8, padding:"8px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Print</button>
